@@ -37,42 +37,44 @@ class TeleoperationNode(Node):
             msg_type=KeyLogger,
             topic="teleop",
             callback=self._handle_keylog,
-            qos_profile=10
+            qos_profile=10,
         )
 
         self._teleoperation_publisher = self.create_publisher(
-            msg_type=Twist,
-            topic="cmd_vel",
-            qos_profile=10
+            msg_type=Twist, topic="cmd_vel", qos_profile=10
         )
 
         self._lidar_listener = self.create_subscription(
             msg_type=LaserScan,
             topic="scan",
             callback=self._handle_lidar,
-            qos_profile=qos_profile_sensor_data
+            qos_profile=qos_profile_sensor_data,
         )
 
-    def _get_lidar_areas(self, ranges: list[float], increment: float) -> tuple[numpy.typing.NDArray, numpy.typing.NDArray]:
+    def _get_lidar_areas(
+        self, ranges: list[float], increment: float
+    ) -> tuple[numpy.typing.NDArray, numpy.typing.NDArray]:
         # Forward 1st range, 0:x_angle
         forward_range_1_start: int = 0
-        forward_range_1_end: int = forward_range_1_start + \
-            int(self.lidar_x_angle_rad/increment)
+        forward_range_1_end: int = forward_range_1_start + int(
+            self.lidar_x_angle_rad / increment
+        )
 
         # Left points, x_angle:z_angle
         left_range_start: int = forward_range_1_end
-        left_range_end: int = left_range_start + \
-            int(self.lidar_z_angle_rad/increment)
+        left_range_end: int = left_range_start + int(self.lidar_z_angle_rad / increment)
 
         # Backward points, z_angle:z_angle+2*x_angle
         backward_range_start: int = left_range_end
-        backward_range_end: int = backward_range_start + \
-            int(self.lidar_x_angle_rad*2/increment)
+        backward_range_end: int = backward_range_start + int(
+            self.lidar_x_angle_rad * 2 / increment
+        )
 
         # Right points, z_angle+2*x_angle:2*z_angle+2*x_angle
         right_range_start: int = backward_range_end
-        right_range_end: int = right_range_start + \
-            int(self.lidar_z_angle_rad/increment)
+        right_range_end: int = right_range_start + int(
+            self.lidar_z_angle_rad / increment
+        )
 
         # Forward 2nd range: 2*z_angle+2*x_angle:0
         forward_range_2_start: int = right_range_end
@@ -80,29 +82,26 @@ class TeleoperationNode(Node):
 
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
-        np.nan_to_num(ranges_array, copy=False, nan=self.allowed_distance+1)
-        # self.get_logger().info(any(ranges_array.isnan()))
+        np.nan_to_num(ranges_array, copy=False, nan=self.allowed_distance + 1)
 
-        forward: numpy.typing.NDArray = np.concatenate((ranges_array[forward_range_1_start:forward_range_1_end],
-                                                       ranges_array[forward_range_2_start:forward_range_2_end]))
+        forward: numpy.typing.NDArray = np.concatenate(
+            (
+                ranges_array[forward_range_1_start:forward_range_1_end],
+                ranges_array[forward_range_2_start:forward_range_2_end],
+            )
+        )
 
-        # right: numpy.typing.NDArray = ranges_array[right_range_start:right_range_end]
-
-        backward: numpy.typing.NDArray = ranges_array[backward_range_start:backward_range_end]
-
-        # left: numpy.typing.NDArray = ranges_array[left_range_start:left_range_end]
+        backward: numpy.typing.NDArray = ranges_array[
+            backward_range_start:backward_range_end
+        ]
 
         return forward, backward
 
     def _handle_lidar(self, msg: LaserScan) -> None:
-        forward, backward = self._get_lidar_areas(
-            msg.ranges, msg.angle_increment)
+        forward, backward = self._get_lidar_areas(msg.ranges, msg.angle_increment)
 
         self.forward_allowed = min(forward) > self.allowed_distance
-        # self.right_allowed = min(right) > self.allowed_distance
         self.backward_allowed = min(backward) > self.allowed_distance
-        # self.left_allowed = min(
-        #     left) > self.allowed_distance and self.linear > 0.0
 
         # Linear velocity
         if not self.forward_allowed and self.linear > 0.0:
@@ -115,18 +114,6 @@ class TeleoperationNode(Node):
             cmd.linear.x = 0.0
             self.linear = 0.0
             self._teleoperation_publisher.publish(cmd)
-
-        # Angular velocity
-        # if not self.left_allowed and self.angular < 0.0:
-        #     cmd = Twist()
-        #     cmd.angular.z = 0.0
-        #     self.angular = 0.0
-        #     self._teleoperation_publisher.publish(cmd)
-        # elif not self.right_allowed and self.angular > 0.0:
-        #     cmd = Twist()
-        #     cmd.angular.z = 0.0
-        #     self.angular = 0.0
-        #     self._teleoperation_publisher.publish(cmd)
 
     def _handle_keylog(self, msg: KeyLogger) -> None:
         key: str = msg.key_id
@@ -159,5 +146,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
