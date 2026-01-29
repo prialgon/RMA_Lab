@@ -7,6 +7,8 @@ from sensor_msgs.msg import LaserScan
 import numpy as np
 import numpy.typing
 
+from rclpy.qos import qos_profile_sensor_data
+
 
 class TeleoperationNode(Node):
     def __init__(self) -> None:
@@ -17,7 +19,7 @@ class TeleoperationNode(Node):
 
         self.allowed_distance: float = 0.3
 
-        self.velocity_increment: float = 0.02
+        self.velocity_increment: float = 0.05
 
         self.lidar_x_angle: float = 10
         self.lidar_z_angle: float = 160
@@ -48,7 +50,7 @@ class TeleoperationNode(Node):
             msg_type=LaserScan,
             topic="scan",
             callback=self._handle_lidar,
-            qos_profile=10
+            qos_profile=qos_profile_sensor_data
         )
 
     def _get_lidar_areas(self, ranges: list[float], increment: float) -> tuple[numpy.typing.NDArray, numpy.typing.NDArray]:
@@ -79,6 +81,7 @@ class TeleoperationNode(Node):
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
         np.nan_to_num(ranges_array, copy=False, nan=self.allowed_distance+1)
+        # self.get_logger().info(any(ranges_array.isnan()))
 
         forward: numpy.typing.NDArray = np.concatenate((ranges_array[forward_range_1_start:forward_range_1_end],
                                                        ranges_array[forward_range_2_start:forward_range_2_end]))
