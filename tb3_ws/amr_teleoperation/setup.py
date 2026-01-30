@@ -12,9 +12,9 @@ setup(
     ],
     install_requires=["setuptools"],
     zip_safe=True,
-    maintainer="Dodgy_consulting",
+    maintainer="Dodgy Consulting",
     maintainer_email="202300876@alu.comillas.edu",
-    description="keyboard control for Turtlebot3 teleoperation",
+    description="Keyboard control for Turtlebot3 teleoperation",
     license="Apache License 2.0",
     tests_require=["pytest"],
     entry_points={
