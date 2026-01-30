@@ -14,8 +14,8 @@ class TeleoperationNode(Node):
     def __init__(self) -> None:
         super().__init__("teleoperation_node")
 
-        self.linear: float = 0.0  # Forward > 0, Backward < 0
-        self.angular: float = 0.0  # Left > 0, Right < 0
+        self.linear: float = 0.0
+        self.angular: float = 0.0
 
         self.allowed_distance: float = 0.3
 
@@ -24,7 +24,6 @@ class TeleoperationNode(Node):
         self.lidar_x_angle: float = 10
         self.lidar_z_angle: float = 160
 
-        # Do not change
         self.lidar_x_angle_rad: float = self.lidar_x_angle * np.pi / 180
         self.lidar_z_angle_rad: float = self.lidar_z_angle * np.pi / 180
 
