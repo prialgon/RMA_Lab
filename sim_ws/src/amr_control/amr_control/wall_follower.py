@@ -21,9 +21,10 @@ class WallFollower:
     
     # LiDAR angles
     INCREMENT = 360/240 * np.pi / 180 # Angle increment [rad]
-    LIDAR_X_ANGLE = 25 * np.pi / 180 # Angle for x-axis [rad]
-    LIDAR_Z_ANGLE = 65 * np.pi / 180 # Angle for z-axis [rad]
-    LIDAR_FILL_ANGLE = 180 * np.pi / 180
+    LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad]
+    LIDAR_Z_ANGLE = 15 * np.pi / 180 # Angle for z-axis [rad]
+    LIDAR_FILL_ANGLE = 220 * np.pi / 180
+    LIDAR_DEADZONE = 40 * np.pi / 180
     ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.30 # Distance to objects on sides [m]
     OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
@@ -60,9 +61,12 @@ class WallFollower:
         forward_range_1_end: int = forward_range_1_start + int(
             self.LIDAR_X_ANGLE / self.INCREMENT
         )
+        
+        deadzone_start: int = forward_range_1_end
+        deadzone_end: int = deadzone_start + int(self.LIDAR_DEADZONE / self.INCREMENT)
 
         # Left points, x_angle:z_angle
-        left_range_start: int = forward_range_1_end
+        left_range_start: int = deadzone_end
         left_range_end: int = left_range_start + int(self.LIDAR_Z_ANGLE / self.INCREMENT)
 
         # Backward Fill points, z_angle:z_angle+2*x_angle
@@ -76,13 +80,18 @@ class WallFollower:
         right_range_end: int = right_range_start + int(
             self.LIDAR_Z_ANGLE / self.INCREMENT
         )
+        
+        deadzone_start_2: int = right_range_end
+        deadzone_end_2: int = deadzone_start_2 + int(
+            self.LIDAR_DEADZONE / self.INCREMENT
+        )
 
         # Forward 2nd range: 2*z_angle+2*x_angle:0
-        forward_range_2_start: int = right_range_end
+        forward_range_2_start: int = deadzone_end_2
 
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
-        np.nan_to_num(ranges_array, copy=False, nan=self.ALLOWED_DISTANCE_TURN + 1)
+        np.nan_to_num(ranges_array, copy=False, nan=np.inf)
 
         forward: numpy.typing.NDArray = np.concatenate(
             (
@@ -102,15 +111,23 @@ class WallFollower:
         return forward, left, right
     
     def _get_new_state(self) -> States:
-        if self._forward_allowed:
-            return States.FORWARD
+        if self._current_state in [States.LEFT, States.RIGHT, States.TURNAROUND]:
+            if self._forward_allowed:
+                return States.FORWARD
+            return self._current_state
+
+        if self._right_allowed and self._current_state == States.FORWARD:
+             return States.RIGHT
+
+        if not self._forward_allowed:
+            if self._right_allowed:
+                return States.RIGHT
+            elif self._left_allowed:
+                return States.LEFT
+            else:
+                return States.TURNAROUND
         
-        if self._left_allowed:
-            return States.LEFT
-        elif self._right_allowed:
-            return States.RIGHT
-        
-        return States.TURNAROUND
+        return States.FORWARD
     
     def _error(self, points: numpy.typing.NDArray) -> float:
         return self.OBJECTIVE_DISTANCE_WALL - float(np.median(points))
@@ -119,6 +136,7 @@ class WallFollower:
         de: float = (error - self._prev_error) / self._dt
         self._prev_error = error
         return self.KP * error + self.KD * de
+        
         
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
         """Wall following exploration algorithm.
@@ -135,8 +153,8 @@ class WallFollower:
 
         """
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-        v = 0.15
-        w = 0.0
+        v: float = 0.0
+        w: float = 0.0
         
         forward, left, right = self._get_lidar_areas(z_scan)
         
@@ -146,24 +164,27 @@ class WallFollower:
         
         self._current_state = self._get_new_state()
         
-        left_error: float = self._error(left[-self.SIDE_POINTS:])
-        right_error: float = self._error(right[:self.SIDE_POINTS])
-    
-        
         if self._current_state == States.FORWARD:
+            v = self.LINEAR_SPEED_MAX * 0.8
+            right_error: float = self._error(right[:self.SIDE_POINTS])
             w = self._get_pd(right_error)
         elif self._current_state == States.LEFT:
-            v = 0.05
-            w = 0.3
-        elif self._current_state == States.RIGHT:
-            v = 0.05
-            w = -0.3
-        elif self._current_state == States.TURNAROUND:
+            v = self.LINEAR_SPEED_MAX * 0.6
             w = 1.0
+        elif self._current_state == States.RIGHT:
+            v = self.LINEAR_SPEED_MAX * 0.6
+            w = -1.0
+        elif self._current_state == States.TURNAROUND:
             v = 0.0
+            w = 1.2
             self._prev_error = 0.0
             
-        w = np.clip(w, -2.0, 2.0)
+        w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
+        w = np.clip(w, -w_max, w_max)
+        
+        v_best: float = self.LINEAR_SPEED_MAX - (abs(w) * (self.TRACK / 2))
+        
+        v = min(v, v_best)
         
         return v, w
     
