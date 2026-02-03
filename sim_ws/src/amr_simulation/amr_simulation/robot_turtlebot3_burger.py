@@ -11,7 +11,8 @@ class TurtleBot3Burger(Robot):
     SENSOR_RANGE_MIN = 0.16  # Minimum LiDAR sensor range [m]
     TRACK = 0.16  # Distance between same axle wheels [m]
     WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
-    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
+    # Maximum motor angular speed [rad/s]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS
 
     def __init__(self, sim: Any, dt: float) -> None:
         """Turtlebot3 Burger robot class initializer.
@@ -21,10 +22,14 @@ class TurtleBot3Burger(Robot):
             dt: Sampling period [s].
 
         """
-        Robot.__init__(self, sim=sim, track=self.TRACK, wheel_radius=self.WHEEL_RADIUS)
+        Robot.__init__(self, sim=sim, track=self.TRACK,
+                       wheel_radius=self.WHEEL_RADIUS)
         self._dt: float = dt
         self._motors: dict[str, int] = self._init_motors()
-        
+
+        self.last_angular_velocity_right: float = 0.0
+        self.last_angular_velocity_left: float = 0.0
+
     def sense(self) -> tuple[list[float], float, float]:
         """Read the LiDAR and the encoders.
 
@@ -35,7 +40,8 @@ class TurtleBot3Burger(Robot):
 
         """
         # Read LiDAR
-        packed_data: str = self._sim.getBufferProperty(self._sim.handle_scene, "signal.lidar")
+        packed_data: str = self._sim.getBufferProperty(
+            self._sim.handle_scene, "signal.lidar")
         z_scan: list[float] = self._sim.unpackFloatTable(packed_data)
 
         # Return nan if the measurement failed
@@ -70,15 +76,43 @@ class TurtleBot3Burger(Robot):
         # Read the angular position increment in the last sampling period [rad]
         encoders: dict[str, float] = {}
 
-        encoders["left"] = self._sim.getFloatProperty(self._sim.handle_scene, "signal.leftEncoder")
+        encoders["left"] = self._sim.getFloatProperty(
+            self._sim.handle_scene, "signal.leftEncoder")
         encoders["right"] = self._sim.getFloatProperty(
             self._sim.handle_scene, "signal.rightEncoder"
         )
 
         # TODO: 2.2. Compute the derivatives of the angular positions to obtain velocities [rad/s].
-        
+
         # TODO: 2.3. Solve forward differential kinematics (i.e., calculate z_v and z_w).
         z_v = 0.0
         z_w = 0.0
-        
+
         return z_v, z_w
+
+    def move(self, v: float, w: float) -> None:
+        """Solve inverse kinematics and send commands to the motors.
+
+        Args:
+            v: Linear velocity of the robot center [m/s].
+            w: Angular velocity of the robot center [rad/s].
+
+        """
+        left_angular_velocity: float = (
+            v - self.TRACK/2 * w)/(self.WHEEL_RADIUS)
+        right_angular_velocity: float = (
+            v + self.TRACK/2 * w)/(self.WHEEL_RADIUS)
+
+        if left_angular_velocity > self.WHEEL_SPEED_MAX:
+            left_angular_velocity = self.last_angular_velocity_left
+
+        if right_angular_velocity > self.WHEEL_SPEED_MAX:
+            right_angular_velocity = self.last_angular_velocity_right
+
+        self._sim.setJointTargetVelocity(
+            self._motors["left"], left_angular_velocity)
+        self._sim.setJointTargetVelocity(
+            self._motors["right"], right_angular_velocity)
+
+        self.last_angular_velocity_left = left_angular_velocity
+        self.last_angular_velocity_right = right_angular_velocity
