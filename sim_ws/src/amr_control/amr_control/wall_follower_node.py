@@ -44,7 +44,7 @@ class WallFollowerNode(LifecycleNode):
             self._wall_follower = WallFollower(
                 dt,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
 
             # Publishers
@@ -62,8 +62,8 @@ class WallFollowerNode(LifecycleNode):
             self._subscribers.append(
                 message_filters.Subscriber(
                     self,
-                    msg_type=Odometry,
-                    topic_name="odometry",
+                    Odometry,
+                    "odometry",
                     qos_profile=10
                 )
             )
@@ -71,8 +71,8 @@ class WallFollowerNode(LifecycleNode):
             self._subscribers.append(
                 message_filters.Subscriber(
                     self,
-                    msg_type=LaserScan,
-                    topic_name="scan",
+                    LaserScan,
+                    "scan",
                     qos_profile=qos_profile_sensor_data
                 )
             )
