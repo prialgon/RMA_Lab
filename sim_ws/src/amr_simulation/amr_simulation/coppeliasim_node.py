@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy, qos_profile_sensor_data
 
 import message_filters
 from amr_msgs.msg import PoseStamped
@@ -38,16 +38,19 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             enable_localization = (
-                self.get_parameter("enable_localization").get_parameter_value().bool_value
+                self.get_parameter(
+                    "enable_localization").get_parameter_value().bool_value
             )
             self._goal = tuple(
-                self.get_parameter("goal").get_parameter_value().double_array_value.tolist()
+                self.get_parameter("goal").get_parameter_value(
+                ).double_array_value.tolist()
             )
             pose_tolerance = tuple(
                 self.get_parameter("pose_tolerance")
@@ -55,7 +58,8 @@ class CoppeliaSimNode(LifecycleNode):
                 .double_array_value.tolist()
             )
             start = tuple(
-                self.get_parameter("start").get_parameter_value().double_array_value.tolist()
+                self.get_parameter("start").get_parameter_value(
+                ).double_array_value.tolist()
             )
 
             # Attribute and object initializations
@@ -65,12 +69,19 @@ class CoppeliaSimNode(LifecycleNode):
 
             # Publishers
             # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
-            
+            self._publisher_odometry = self.create_publisher(
+                msg_type=Odometry, topic="odometry", qos_profile=10
+            )
+
+            self._publisher_scan = self.create_publisher(
+                msg_type=LaserScan, topic="scan", qos_profile=qos_profile_sensor_data
+            )
+
             # Subscribers
             # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
-            
+
             # TODO: 3.3. Sync the /pose and /cmd_vel subscribers if enable_localization is True.
-            
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -84,7 +95,8 @@ class CoppeliaSimNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'active' state.")
 
         try:
             # Initial method calls
@@ -117,13 +129,14 @@ class CoppeliaSimNode(LifecycleNode):
         # TODO: 2.13. Parse the velocities from the TwistStamped message (i.e., read v and w).
         v: float = 0.0
         w: float = 0.0
-        
+
         # Execute simulation step
         self._robot.move(v, w)
         self._coppeliasim.next_step()
         z_scan, z_v, z_w = self._robot.sense()
 
-        self.get_logger().info(f"Odometry: z_v = {z_v:.3f} m/s, w = {z_w:+.3f} rad/s")
+        self.get_logger().info(
+            f"Odometry: z_v = {z_v:.3f} m/s, w = {z_w:+.3f} rad/s")
 
         # Check goal
         if self._check_goal():
@@ -192,7 +205,8 @@ class CoppeliaSimNode(LifecycleNode):
         goal_found = False
 
         if self._localized:
-            _, _, _, goal_found = self._coppeliasim.check_position(self._goal[0], self._goal[1])
+            _, _, _, goal_found = self._coppeliasim.check_position(
+                self._goal[0], self._goal[1])
 
             if goal_found:
                 self.get_logger().warn("Congratulations, you reached the goal!")
@@ -227,8 +241,12 @@ class CoppeliaSimNode(LifecycleNode):
 
         """
         # TODO: 2.5. Complete the function body with your code (i.e., replace the pass statement).
-        pass
-        
+        odometry_msg: Odometry = Odometry()
+        odometry_msg.header.stamp = self.get_clock().now().to_msg()
+        odometry_msg.twist.twist.linear.x = z_v
+        odometry_msg.twist.twist.angular.z = z_w
+        self._publisher_odometry.publish(odometry_msg)
+
     def _publish_scan(self, z_scan: list[float]) -> None:
         """Publishes LiDAR measurements in a sensor_msgs.msg.LaserScan message.
 
@@ -237,8 +255,11 @@ class CoppeliaSimNode(LifecycleNode):
 
         """
         # TODO: 2.6. Complete the function body with your code (i.e., replace the pass statement).
-        pass
-        
+        scan_msg: LaserScan = LaserScan()
+        scan_msg.header.stamp = self.get_clock().now().to_msg()
+        scan_msg.ranges = z_scan
+        self._publisher_scan.publish(scan_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
