@@ -27,8 +27,8 @@ class TurtleBot3Burger(Robot):
         self._dt: float = dt
         self._motors: dict[str, int] = self._init_motors()
 
-        self.last_angular_velocity_right: float = 0.0
-        self.last_angular_velocity_left: float = 0.0
+        self._last_angular_velocity_right: float = 0.0
+        self._last_angular_velocity_left: float = 0.0
 
     def sense(self) -> tuple[list[float], float, float]:
         """Read the LiDAR and the encoders.
@@ -83,10 +83,12 @@ class TurtleBot3Burger(Robot):
         )
 
         # TODO: 2.2. Compute the derivatives of the angular positions to obtain velocities [rad/s].
+        w_left: float = encoders["left"]/self._dt
+        w_right: float = encoders["right"]/self._dt
 
         # TODO: 2.3. Solve forward differential kinematics (i.e., calculate z_v and z_w).
-        z_v = 0.0
-        z_w = 0.0
+        z_v = (w_right + w_left)/2 * self.WHEEL_RADIUS
+        z_w = (w_right - w_left)/(self.TRACK) * self.WHEEL_RADIUS
 
         return z_v, z_w
 
@@ -104,15 +106,15 @@ class TurtleBot3Burger(Robot):
             v + self.TRACK/2 * w)/(self.WHEEL_RADIUS)
 
         if left_angular_velocity > self.WHEEL_SPEED_MAX:
-            left_angular_velocity = self.last_angular_velocity_left
+            left_angular_velocity = self._last_angular_velocity_left
 
         if right_angular_velocity > self.WHEEL_SPEED_MAX:
-            right_angular_velocity = self.last_angular_velocity_right
+            right_angular_velocity = self._last_angular_velocity_right
 
         self._sim.setJointTargetVelocity(
             self._motors["left"], left_angular_velocity)
         self._sim.setJointTargetVelocity(
             self._motors["right"], right_angular_velocity)
 
-        self.last_angular_velocity_left = left_angular_velocity
-        self.last_angular_velocity_right = right_angular_velocity
+        self._last_angular_velocity_left = left_angular_velocity
+        self._last_angular_velocity_right = right_angular_velocity
