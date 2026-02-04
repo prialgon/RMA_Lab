@@ -4,8 +4,8 @@ import numpy.typing
 
 class States(Enum):
     FORWARD = 1
-    RIGHT = 2
-    LEFT = 3
+    LEFT = 2
+    RIGHT = 3
     TURNAROUND = 4
 
 class WallFollower:
@@ -22,9 +22,9 @@ class WallFollower:
     # LiDAR angles
     INCREMENT = 360/240 * np.pi / 180 # Angle increment [rad]
     LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad]
-    LIDAR_Z_ANGLE = 15 * np.pi / 180 # Angle for z-axis [rad]
+    LIDAR_Z_ANGLE = 45 * np.pi / 180 # Angle for z-axis [rad]
     LIDAR_FILL_ANGLE = 220 * np.pi / 180
-    LIDAR_DEADZONE = 40 * np.pi / 180
+    LIDAR_DEADZONE = 10 * np.pi / 180
     ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.30 # Distance to objects on sides [m]
     OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
@@ -110,20 +110,22 @@ class WallFollower:
 
         return forward, left, right
     
-    def _get_new_state(self) -> States:
-        if self._current_state in [States.LEFT, States.RIGHT, States.TURNAROUND]:
+    def _get_new_state(self, left: float, right: float) -> States:
+        if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
             if self._forward_allowed:
                 return States.FORWARD
             return self._current_state
 
-        if self._right_allowed and self._current_state == States.FORWARD:
-             return States.RIGHT
-
         if not self._forward_allowed:
-            if self._right_allowed:
-                return States.RIGHT
+            if self._left_allowed and self._right_allowed:
+                if left > right:
+                    return States.LEFT
+                else:
+                    return States.RIGHT
             elif self._left_allowed:
                 return States.LEFT
+            elif self._right_allowed:
+                return States.RIGHT
             else:
                 return States.TURNAROUND
         
@@ -162,7 +164,7 @@ class WallFollower:
         self._left_allowed = min(left) > self.ALLOWED_DISTANCE_TURN
         self._right_allowed = min(right) > self.ALLOWED_DISTANCE_TURN
         
-        self._current_state = self._get_new_state()
+        self._current_state = self._get_new_state(min(left), min(right))
         
         if self._current_state == States.FORWARD:
             v = self.LINEAR_SPEED_MAX * 0.8
