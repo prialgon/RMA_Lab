@@ -22,17 +22,19 @@ class WallFollower:
     # LiDAR angles
     INCREMENT = 360/240 * np.pi / 180 # Angle increment [rad]
     LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad]
-    LIDAR_Z_ANGLE = 45 * np.pi / 180 # Angle for z-axis [rad]
-    LIDAR_FILL_ANGLE = 220 * np.pi / 180
-    LIDAR_DEADZONE = 10 * np.pi / 180
+    LIDAR_Z_ANGLE = 70 * np.pi / 180 # Angle for z-axis [rad]
+    LIDAR_FILL_ANGLE = 180 * np.pi / 180
+    LIDAR_DEADZONE = 5 * np.pi / 180
     ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
-    ALLOWED_DISTANCE_TURN = 0.30 # Distance to objects on sides [m]
+    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.20 # Distance to objects forward [m]
+    ALLOWED_DISTANCE_TURN = 0.15 # Distance to objects on sides [m]
     OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
+    EMERGENCY_DISTANCE_TURNAROUND = 0.15 # Distance to activate turnaround [m]
     
     # PD Control
-    SIDE_POINTS = 5 # Number of points to get
-    KP = 1.5
-    KD = 0.8
+    SIDE_POINTS = 10 # Number of points to get
+    KP = 2.0
+    KD = 1.0
 
     
     def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
@@ -115,21 +117,28 @@ class WallFollower:
             if self._forward_allowed:
                 return States.FORWARD
             return self._current_state
+        
+        if self._forward_allowed:
+            return States.FORWARD
+        
+        if self._current_state == States.FORWARD:
+            # if not self._right_allowed and not self._left_allowed:
+            #     return States.TURNAROUND
 
-        if not self._forward_allowed:
-            if self._left_allowed and self._right_allowed:
+            if self._right_allowed and self._left_allowed:
                 if left > right:
                     return States.LEFT
                 else:
                     return States.RIGHT
-            elif self._left_allowed:
-                return States.LEFT
-            elif self._right_allowed:
+            
+            if self._right_allowed:
                 return States.RIGHT
-            else:
-                return States.TURNAROUND
+            
+            if self._left_allowed:
+                return States.LEFT
         
-        return States.FORWARD
+        raise Exception("NO NEW STATE")
+        
     
     def _error(self, points: numpy.typing.NDArray) -> float:
         return self.OBJECTIVE_DISTANCE_WALL - float(np.median(points))
@@ -160,25 +169,34 @@ class WallFollower:
         
         forward, left, right = self._get_lidar_areas(z_scan)
         
-        self._forward_allowed = min(forward) > self.ALLOWED_DISTANCE_FORWARD
+        if self._current_state not in [States.LEFT, States.RIGHT]:
+            self._forward_allowed = min(forward) > self.ALLOWED_DISTANCE_FORWARD
+        else: 
+            self._forward_allowed = min(forward) > self.ALLOWED_DISTANCE_FORWARD_IN_TURN
+            
         self._left_allowed = min(left) > self.ALLOWED_DISTANCE_TURN
         self._right_allowed = min(right) > self.ALLOWED_DISTANCE_TURN
         
         self._current_state = self._get_new_state(min(left), min(right))
         
+        if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
+            self._current_state = States.TURNAROUND
+        
+        # self._logger.warn(str(self._current_state))
+        
         if self._current_state == States.FORWARD:
-            v = self.LINEAR_SPEED_MAX * 0.8
+            v = self.LINEAR_SPEED_MAX * 0.9
             right_error: float = self._error(right[:self.SIDE_POINTS])
             w = self._get_pd(right_error)
         elif self._current_state == States.LEFT:
-            v = self.LINEAR_SPEED_MAX * 0.6
+            v = self.LINEAR_SPEED_MAX * 0.5
             w = 1.0
         elif self._current_state == States.RIGHT:
-            v = self.LINEAR_SPEED_MAX * 0.6
+            v = self.LINEAR_SPEED_MAX * 0.5
             w = -1.0
         elif self._current_state == States.TURNAROUND:
             v = 0.0
-            w = 1.2
+            w = 2.0
             self._prev_error = 0.0
             
         w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
