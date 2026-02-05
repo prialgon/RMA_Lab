@@ -1,6 +1,7 @@
 from enum import Enum
 import numpy as np
 import numpy.typing
+from rclpy.impl.rcutils_logger import RcutilsLogger
 
 class States(Enum):
     FORWARD = 1
@@ -21,23 +22,35 @@ class WallFollower:
     
     # LiDAR angles
     INCREMENT = 360/240 * np.pi / 180 # Angle increment [rad]
-    LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad]
+    LIDAR_X_ANGLE = 18 * np.pi / 180 # Angle for x-axis [rad]
     LIDAR_Z_ANGLE = 70 * np.pi / 180 # Angle for z-axis [rad]
-    LIDAR_FILL_ANGLE = 180 * np.pi / 180
-    LIDAR_DEADZONE = 5 * np.pi / 180
-    ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
-    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.20 # Distance to objects forward [m]
+    LIDAR_FILL_ANGLE = 180 * np.pi / 180 # Angle for no-read zone [rad]
+    LIDAR_DEADZONE = 2 * np.pi / 180 # Angle for area between forward and side [rad]
+    
+    # Distance control
+    ALLOWED_DISTANCE_FORWARD = 0.50 # Distance to objects forward [m]
+    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.25 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.15 # Distance to objects on sides [m]
-    OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
-    EMERGENCY_DISTANCE_TURNAROUND = 0.15 # Distance to activate turnaround [m]
+    OBJECTIVE_DISTANCE_WALL = 0.22 # Distance to wall [m]
+    EMERGENCY_DISTANCE_TURNAROUND = 0.18 # Distance to activate turnaround [m]
+    FORWARD_TURN_EMERGENCY_DISTANCE = 0.05 # Distance to forward corner [m]
     
     # PD Control
     SIDE_POINTS = 10 # Number of points to get
-    KP = 2.0
-    KD = 1.0
+    KP = 1.5
+    KD = 0.8
+    
+    # Velocity Control
+    FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
+    FORWARD_LINEAR_TURN_VELOCITY = 0.9 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
+    TURN_LINEAR_VELOCITY = 0.6 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
+
+    # Angular Control
+    TURN_ANGULAR_VELOCITY = 0.8 * WHEEL_SPEED_MAX # Turning angular velocity [rad/s]
+    TURNAROUND_ANGULAR_VELOCITY = 0.99 * WHEEL_SPEED_MAX # Turnaroud angular velocity [rad/s]
 
     
-    def __init__(self, dt: float, logger=None, simulation: bool = False) -> None:
+    def __init__(self, dt: float, logger: RcutilsLogger | None = None, simulation: bool = False) -> None:
         """Wall following class initializer.
 
         Args:
@@ -47,28 +60,32 @@ class WallFollower:
 
         """
         self._dt: float = dt
-        self._logger = logger
-        self._simulation: bool = simulation
+        self._logger: RcutilsLogger | None = logger
+        self._simulation: bool = simulation 
         self._current_state = States.FORWARD
         
         self._forward_allowed: bool = False
         self._right_allowed: bool = False
         self._left_allowed: bool = False
+        self._forward_turning: bool = False
+        
+        self._right_emergency_turn: bool = False
+        self._left_emergency_turn: bool = False
         
         self._prev_error: float = 0.0
         
-    def _get_lidar_areas(self, ranges: list[float]) -> tuple[numpy.typing.NDArray, numpy.typing.NDArray, numpy.typing.NDArray]:
+    def _get_lidar_areas(self, ranges: list[float]) -> tuple[numpy.typing.NDArray, numpy.typing.NDArray, numpy.typing.NDArray, numpy.typing.NDArray, numpy.typing.NDArray]:
         # Forward 1st range, 0:x_angle
         forward_range_1_start: int = 0
         forward_range_1_end: int = forward_range_1_start + int(
             self.LIDAR_X_ANGLE / self.INCREMENT
         )
         
-        deadzone_start: int = forward_range_1_end
-        deadzone_end: int = deadzone_start + int(self.LIDAR_DEADZONE / self.INCREMENT)
+        forward_left_range_start: int = forward_range_1_end
+        forward_left_range_end: int = forward_left_range_start + int(self.LIDAR_DEADZONE / self.INCREMENT)
 
         # Left points, x_angle:z_angle
-        left_range_start: int = deadzone_end
+        left_range_start: int = forward_left_range_end
         left_range_end: int = left_range_start + int(self.LIDAR_Z_ANGLE / self.INCREMENT)
 
         # Backward Fill points, z_angle:z_angle+2*x_angle
@@ -83,13 +100,13 @@ class WallFollower:
             self.LIDAR_Z_ANGLE / self.INCREMENT
         )
         
-        deadzone_start_2: int = right_range_end
-        deadzone_end_2: int = deadzone_start_2 + int(
+        forward_right_range_start: int = right_range_end
+        forward_right_range_end: int = forward_right_range_start + int(
             self.LIDAR_DEADZONE / self.INCREMENT
         )
 
         # Forward 2nd range: 2*z_angle+2*x_angle:0
-        forward_range_2_start: int = deadzone_end_2
+        forward_range_2_start: int = forward_right_range_end
 
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
@@ -109,8 +126,16 @@ class WallFollower:
         right: numpy.typing.NDArray = ranges_array[
             right_range_start:right_range_end
         ]
+        
+        forward_left: numpy.typing.NDArray = ranges_array[
+            forward_left_range_start:forward_left_range_end
+        ]
+        
+        forward_right: numpy.typing.NDArray = ranges_array[
+            forward_right_range_start:forward_right_range_end
+        ]
 
-        return forward, left, right
+        return forward, left, right, forward_left, forward_right
     
     def _get_new_state(self, left: float, right: float) -> States:
         if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
@@ -118,13 +143,21 @@ class WallFollower:
                 return States.FORWARD
             return self._current_state
         
+        if self._left_emergency_turn and self._right_emergency_turn:
+            if left > right:
+                return States.LEFT
+            else:
+                return States.RIGHT
+        elif self._left_emergency_turn:
+            return States.LEFT
+        elif self._right_emergency_turn:
+            return States.RIGHT
+            
+        
         if self._forward_allowed:
             return States.FORWARD
         
         if self._current_state == States.FORWARD:
-            # if not self._right_allowed and not self._left_allowed:
-            #     return States.TURNAROUND
-
             if self._right_allowed and self._left_allowed:
                 if left > right:
                     return States.LEFT
@@ -167,37 +200,52 @@ class WallFollower:
         v: float = 0.0
         w: float = 0.0
         
-        forward, left, right = self._get_lidar_areas(z_scan)
+        forward, left, right, forward_left, forward_right = self._get_lidar_areas(z_scan)
         
+        # Forward allowed
         if self._current_state not in [States.LEFT, States.RIGHT]:
             self._forward_allowed = min(forward) > self.ALLOWED_DISTANCE_FORWARD
-        else: 
+            self._forward_turning = False
+        else: # Forward turning allowed
             self._forward_allowed = min(forward) > self.ALLOWED_DISTANCE_FORWARD_IN_TURN
-            
+            self._forward_turning = True
+        
+        # Turning allowed
         self._left_allowed = min(left) > self.ALLOWED_DISTANCE_TURN
         self._right_allowed = min(right) > self.ALLOWED_DISTANCE_TURN
         
-        self._current_state = self._get_new_state(min(left), min(right))
+        # Emergency turn
+        self._left_emergency_turn = min(forward_right) < self.FORWARD_TURN_EMERGENCY_DISTANCE
+        self._right_emergency_turn = min(forward_left) < self.FORWARD_TURN_EMERGENCY_DISTANCE
+        
+        self._current_state = self._get_new_state(max(left), max(right))
         
         if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
             self._current_state = States.TURNAROUND
         
-        # self._logger.warn(str(self._current_state))
+        # Logging
+        # if self._logger is not None:
+        #     self._logger.warn(str(self._current_state))
         
         if self._current_state == States.FORWARD:
-            v = self.LINEAR_SPEED_MAX * 0.9
+            if not self._forward_turning:
+                v = self.FORWARD_LINEAR_VELOCITY
+            else:
+                v = self.FORWARD_LINEAR_TURN_VELOCITY
+                
             right_error: float = self._error(right[:self.SIDE_POINTS])
             w = self._get_pd(right_error)
         elif self._current_state == States.LEFT:
-            v = self.LINEAR_SPEED_MAX * 0.5
-            w = 1.0
+            v = self.TURN_LINEAR_VELOCITY
+            w = self.TURN_ANGULAR_VELOCITY
         elif self._current_state == States.RIGHT:
-            v = self.LINEAR_SPEED_MAX * 0.5
-            w = -1.0
+            v = self.TURN_LINEAR_VELOCITY
+            w = -self.TURN_ANGULAR_VELOCITY
         elif self._current_state == States.TURNAROUND:
             v = 0.0
-            w = 2.0
-            self._prev_error = 0.0
+            w = self.TURNAROUND_ANGULAR_VELOCITY
+            
+        self._prev_error = self._error(right[:self.SIDE_POINTS])
             
         w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
         w = np.clip(w, -w_max, w_max)
