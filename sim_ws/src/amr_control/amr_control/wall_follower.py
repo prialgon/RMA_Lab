@@ -28,12 +28,13 @@ class WallFollower:
     LIDAR_DEADZONE = 2 * np.pi / 180 # Angle for area between forward and side [rad]
     
     # Distance control
+    OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
     ALLOWED_DISTANCE_FORWARD = 0.50 # Distance to objects forward [m]
     ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.25 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.15 # Distance to objects on sides [m]
-    OBJECTIVE_DISTANCE_WALL = 0.22 # Distance to wall [m]
     EMERGENCY_DISTANCE_TURNAROUND = 0.18 # Distance to activate turnaround [m]
     FORWARD_TURN_EMERGENCY_DISTANCE = 0.05 # Distance to forward corner [m]
+    FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND = 0.45 # Distance to all walls [m]
     
     # PD Control
     SIDE_POINTS = 10 # Number of points to get
@@ -213,6 +214,12 @@ class WallFollower:
         # Turning allowed
         self._left_allowed = min(left) > self.ALLOWED_DISTANCE_TURN
         self._right_allowed = min(right) > self.ALLOWED_DISTANCE_TURN
+        
+        # Turnaround in no exit corridor
+        if (all(forward < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and 
+            all(left < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and 
+            all(right < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND)):
+            self._current_state = States.TURNAROUND
         
         # Emergency turn
         self._left_emergency_turn = min(forward_right) < self.FORWARD_TURN_EMERGENCY_DISTANCE
