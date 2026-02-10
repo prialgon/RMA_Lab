@@ -10,6 +10,21 @@ find_package(ament_cmake REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+
+set(msg_files
+  "msg/PoseStamped.msg"
+  "msg/KeyLogger.msg"
+)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  ${msg_files}
+  DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -22,16 +37,5 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-
-find_package(rosidl_default_generators REQUIRED)
-set(msg_files
-"msg/KeyLogger.msg"
-)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-${msg_files}
-)
-
-ament_export_dependencies(rosidl_default_runtime)
 
 ament_package()
