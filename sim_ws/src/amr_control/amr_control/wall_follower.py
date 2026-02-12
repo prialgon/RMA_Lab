@@ -31,9 +31,9 @@ class WallFollower:
     OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
     ALLOWED_DISTANCE_FORWARD = 0.50 # Distance to objects forward [m]
     ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.25 # Distance to objects forward [m]
-    ALLOWED_DISTANCE_TURN = 0.15 # Distance to objects on sides [m]
+    ALLOWED_DISTANCE_TURN = 0.17 # Distance to objects on sides [m]
     EMERGENCY_DISTANCE_TURNAROUND = 0.18 # Distance to activate turnaround [m]
-    FORWARD_TURN_EMERGENCY_DISTANCE = 0.05 # Distance to forward corner [m]
+    FORWARD_TURN_EMERGENCY_DISTANCE = 0.16 # Distance to forward corner [m]
     FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND = 0.45 # Distance to all walls [m]
     
     # PD Control
@@ -43,12 +43,12 @@ class WallFollower:
     
     # Velocity Control
     FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
-    FORWARD_LINEAR_TURN_VELOCITY = 0.9 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
+    FORWARD_LINEAR_TURN_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
     TURN_LINEAR_VELOCITY = 0.6 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
 
     # Angular Control
-    TURN_ANGULAR_VELOCITY = 0.8 * WHEEL_SPEED_MAX # Turning angular velocity [rad/s]
-    TURNAROUND_ANGULAR_VELOCITY = 0.99 * WHEEL_SPEED_MAX # Turnaroud angular velocity [rad/s]
+    TURN_ANGULAR_VELOCITY = 0.6 * WHEEL_SPEED_MAX # Turning angular velocity [rad/s]
+    TURNAROUND_ANGULAR_VELOCITY = 0.7 * WHEEL_SPEED_MAX # Turnaroud angular velocity [rad/s]
 
     
     def __init__(self, dt: float, logger: RcutilsLogger | None = None, simulation: bool = False) -> None:
@@ -111,7 +111,8 @@ class WallFollower:
 
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
-        np.nan_to_num(ranges_array, copy=False, nan=np.inf)
+        ranges_array = np.nan_to_num(ranges_array, nan=self.SENSOR_RANGE_MIN)
+        ranges_array = np.clip(ranges_array, a_min=self.SENSOR_RANGE_MIN, a_max=self.SENSOR_RANGE_MAX)
 
         forward: numpy.typing.NDArray = np.concatenate(
             (

@@ -6,8 +6,8 @@ import math
 
 def generate_launch_description():
     simulation = True
-    # start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
-    start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
+    start = (1.0, -1.0, 0.5 * math.pi)  # Outer corridor
+    # start = (0.6, -0.6, 1.5 * math.pi)  # Inner corridor
 
     wall_follower_node = LifecycleNode(
         package="amr_control",
