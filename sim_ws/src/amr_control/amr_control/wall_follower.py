@@ -22,18 +22,18 @@ class WallFollower:
     
     # LiDAR angles
     INCREMENT = 360/240 * np.pi / 180 # Angle increment [rad]
-    LIDAR_X_ANGLE = 18 * np.pi / 180 # Angle for x-axis [rad]
-    LIDAR_Z_ANGLE = 70 * np.pi / 180 # Angle for z-axis [rad]
+    LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad] (18)
+    LIDAR_Z_ANGLE = 60 * np.pi / 180 # Angle for z-axis [rad] (62)
     LIDAR_FILL_ANGLE = 180 * np.pi / 180 # Angle for no-read zone [rad]
-    LIDAR_DEADZONE = 2 * np.pi / 180 # Angle for area between forward and side [rad]
+    LIDAR_DEADZONE = 15 * np.pi / 180 # Angle for area between forward and side [rad] (10)
     
     # Distance control
     OBJECTIVE_DISTANCE_WALL = 0.20 # Distance to wall [m]
-    ALLOWED_DISTANCE_FORWARD = 0.50 # Distance to objects forward [m]
+    ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
     ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.25 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.17 # Distance to objects on sides [m]
-    EMERGENCY_DISTANCE_TURNAROUND = 0.18 # Distance to activate turnaround [m]
-    FORWARD_TURN_EMERGENCY_DISTANCE = 0.16 # Distance to forward corner [m]
+    EMERGENCY_DISTANCE_TURNAROUND = 0.16 # Distance to activate turnaround [m]
+    FORWARD_TURN_EMERGENCY_DISTANCE = 0.25 # Distance to forward corner [m]
     FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND = 0.45 # Distance to all walls [m]
     
     # PD Control
@@ -44,11 +44,11 @@ class WallFollower:
     # Velocity Control
     FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
     FORWARD_LINEAR_TURN_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
-    TURN_LINEAR_VELOCITY = 0.6 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
+    TURN_LINEAR_VELOCITY = 0.5 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
 
     # Angular Control
     TURN_ANGULAR_VELOCITY = 0.6 * WHEEL_SPEED_MAX # Turning angular velocity [rad/s]
-    TURNAROUND_ANGULAR_VELOCITY = 0.7 * WHEEL_SPEED_MAX # Turnaroud angular velocity [rad/s]
+    TURNAROUND_ANGULAR_VELOCITY = 0.6 * WHEEL_SPEED_MAX # Turnaroud angular velocity [rad/s]
 
     
     def __init__(self, dt: float, logger: RcutilsLogger | None = None, simulation: bool = False) -> None:
@@ -180,7 +180,6 @@ class WallFollower:
     
     def _get_pd(self, error: float) -> float:
         de: float = (error - self._prev_error) / self._dt
-        self._prev_error = error
         return self.KP * error + self.KD * de
         
         
