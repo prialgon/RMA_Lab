@@ -47,9 +47,10 @@ class WallFollower:
     KI = 0.3
 
     # Velocity Control
-    FORWARD_LINEAR_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
-    FORWARD_LINEAR_TURN_VELOCITY = 0.5 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
-    TURN_LINEAR_VELOCITY = 0.5 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
+    MINIMUM_LINEAR_VELOCITY = 0.5
+    FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
+    FORWARD_LINEAR_TURN_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
+    TURN_LINEAR_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
 
     # Angular Control
     TURN_ANGULAR_VELOCITY = 4.0 # Turning angular velocity [rad/s]
@@ -188,22 +189,10 @@ class WallFollower:
     def _error(self, points: numpy.typing.NDArray) -> float:
         return self.OBJECTIVE_DISTANCE_WALL - float(np.median(points))
     
-    def _get_pid(self, error: float) -> float:
-        # 1. Componente Integral (suma del error por el diferencial de tiempo)
-        self._integral_error += error * self._dt
-        
-        # Anti-windup: Limitamos la integral para evitar saturación descontrolada
-        # El valor 0.5 es un ejemplo, ajústalo según la respuesta del robot
-        self._integral_error = np.clip(self._integral_error, -0.5, 0.5)
-        
-        # 2. Componente Derivativo
+    def _get_pd(self, error: float) -> float:
         de: float = (error - self._prev_error) / self._dt
-        
-        # 3. Guardar error actual para el próximo ciclo
         self._prev_error = error
-        
-        # Suma: P + I + D
-        return (self.KP * error) + (self.KI * self._integral_error) + (self.KD * de)
+        return self.KP * error + self.KD * de
         
         
     def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
@@ -270,7 +259,7 @@ class WallFollower:
                 v = self.FORWARD_LINEAR_TURN_VELOCITY
                 
             right_error: float = self._error(right)
-            w = self._get_pid(right_error)
+            w = self._get_pd(right_error)
         elif self._current_state == States.LEFT:
             v = self.TURN_LINEAR_VELOCITY
             w = self.TURN_ANGULAR_VELOCITY
@@ -283,7 +272,7 @@ class WallFollower:
             
         self._prev_error = self._error(right)
             
-        w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
+        w_max: float = (self.LINEAR_SPEED_MAX - abs(min(self.MINIMUM_LINEAR_VELOCITY, v))) / (self.TRACK / 2)
         w = np.clip(w, -w_max, w_max)
         
         v_best: float = self.LINEAR_SPEED_MAX - (abs(w) * (self.TRACK / 2))
