@@ -21,10 +21,11 @@ class WallFollower:
     WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
     
     # LiDAR angles
-    LIDAR_X_ANGLE = 10 * np.pi / 180 
-    LIDAR_Z_ANGLE = 10 * np.pi / 180 
-    LIDAR_FILL_ANGLE = 180 * np.pi / 180 
-    
+    LIDAR_X_ANGLE = 15 * np.pi / 180 # Angle for x-axis [rad]
+    LIDAR_Z_ANGLE = 5 * np.pi / 180 # Angle for z-axis [rad]
+    LIDAR_FILL_ANGLE = 180 * np.pi / 180 # Angle for no-read zone [rad]
+    LIDAR_DEADZONE = 70 * np.pi / 180 # Angle for area between forward and side [rad]
+
     # New Corner Slicing
     LIDAR_DEADZONE = 70 * np.pi / 180 
     LIDAR_CORNER_ANGLE = 5 * np.pi / 180 # The 5-degree measurement zone
@@ -32,9 +33,9 @@ class WallFollower:
     LIDAR_DEADZONE_SLICE = (LIDAR_DEADZONE - LIDAR_CORNER_ANGLE) / 2
     
     # Distance control
-    OBJECTIVE_DISTANCE_WALL = 0.22 # Distance to wall [m]
-    ALLOWED_DISTANCE_FORWARD = 0.40 # Distance to objects forward [m]
-    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.30 # Distance to objects forward [m]
+    OBJECTIVE_DISTANCE_WALL = 0.18 # Distance to wall [m]
+    ALLOWED_DISTANCE_FORWARD = 0.45 # Distance to objects forward [m]
+    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.25 # Distance to objects forward [m]
     ALLOWED_DISTANCE_TURN = 0.25 # Distance to objects on sides [m]
     EMERGENCY_DISTANCE_TURNAROUND = 0.18 # Distance to activate turnaround [m]
     FORWARD_TURN_EMERGENCY_DISTANCE = 0.16 # Distance to forward corner [m]
@@ -42,18 +43,18 @@ class WallFollower:
     
     # PD Control
     SIDE_POINTS = 10 # Number of points to get
-    KP = 2.0
-    KD = 0.2
+    KP = 1.0
+    KD = 1.0
     KI = 0.3
 
     # Velocity Control
     MINIMUM_LINEAR_VELOCITY = 0.5
     FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
-    FORWARD_LINEAR_TURN_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
-    TURN_LINEAR_VELOCITY = 0.8 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
+    FORWARD_LINEAR_TURN_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
+    TURN_LINEAR_VELOCITY = 0.6 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
 
     # Angular Control
-    TURN_ANGULAR_VELOCITY = 4.0 # Turning angular velocity [rad/s]
+    TURN_ANGULAR_VELOCITY = 5.0 # Turning angular velocity [rad/s]
     TURNAROUND_ANGULAR_VELOCITY = 5.5 # Turnaroud angular velocity [rad/s]
 
     
@@ -148,10 +149,10 @@ class WallFollower:
         return forward, left, right, forward_left, forward_right
     
     def _get_new_state(self, left: float, right: float) -> States:
-        if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
-            if self._forward_allowed:
-                return States.FORWARD
-            return self._current_state
+        # if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
+        #     if self._forward_allowed:
+        #         return States.FORWARD
+        #     return self._current_state
         
         if self._left_emergency_turn and self._right_emergency_turn:
             if left > right:
@@ -183,7 +184,7 @@ class WallFollower:
             if not self._left_allowed and not self._right_allowed:
                 return States.TURNAROUND
         
-        raise Exception("NO NEW STATE")
+        return self._current_state
         
     
     def _error(self, points: numpy.typing.NDArray) -> float:
@@ -229,8 +230,8 @@ class WallFollower:
             self._forward_turning = True
         
         # Turning allowed
-        self._left_allowed = min(left) > self.ALLOWED_DISTANCE_TURN
-        self._right_allowed = min(right) > self.ALLOWED_DISTANCE_TURN
+        self._left_allowed = np.median(left) > self.ALLOWED_DISTANCE_TURN
+        self._right_allowed = np.median(right) > self.ALLOWED_DISTANCE_TURN
         
         # Turnaround in no exit corridor
         if (all(forward < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and 
@@ -243,14 +244,15 @@ class WallFollower:
         self._right_emergency_turn = min(forward_left) < self.FORWARD_TURN_EMERGENCY_DISTANCE
         
         self._current_state = self._get_new_state(max(left), max(right))
+        # self._current_state = States.TURNAROUND
         
-        if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
-            self._current_state = States.TURNAROUND
+        # if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
+        #     self._current_state = States.TURNAROUND
         
         # Logging
-        if self._logger is not None:
+        # if self._logger is not None:
             # self._logger.warn(str(np.median(right[:self.SIDE_POINTS])))
-            self._logger.warn(str(self._current_state))
+            # self._logger.warn(str(self._current_state))
         
         if self._current_state == States.FORWARD:
             if not self._forward_turning:
@@ -268,7 +270,7 @@ class WallFollower:
             w = -self.TURN_ANGULAR_VELOCITY
         elif self._current_state == States.TURNAROUND:
             v = 0.0
-            w = self.TURNAROUND_ANGULAR_VELOCITY
+            w = 4.0
             
         self._prev_error = self._error(right)
             
