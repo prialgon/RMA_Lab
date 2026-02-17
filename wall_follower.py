@@ -48,7 +48,7 @@ class WallFollower:
     KI = 0.3
 
     # Velocity Control
-    MINIMUM_LINEAR_VELOCITY = 0.5
+    MINIMUM_LINEAR_VELOCITY = 0.5 * LINEAR_SPEED_MAX
     FORWARD_LINEAR_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity [m/s]
     FORWARD_LINEAR_TURN_VELOCITY = 0.99 * LINEAR_SPEED_MAX # Forward linear velocity while turning [m/s]
     TURN_LINEAR_VELOCITY = 0.6 * LINEAR_SPEED_MAX # Turning linear velocity [m/s]
@@ -121,7 +121,8 @@ class WallFollower:
 
         # Handle NaN
         ranges_array: numpy.typing.NDArray = np.array(ranges)
-        np.nan_to_num(ranges_array, copy=False, nan=self.SENSOR_RANGE_MIN)
+        np.nan_to_num(ranges_array, copy=False, nan=self.SENSOR_RANGE_MIN,
+                      posinf=self.SENSOR_RANGE_MAX, neginf=self.SENSOR_RANGE_MIN)
 
         forward: numpy.typing.NDArray = np.concatenate(
             (
@@ -149,10 +150,10 @@ class WallFollower:
         return forward, left, right, forward_left, forward_right
     
     def _get_new_state(self, left: float, right: float) -> States:
-        # if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
-        #     if self._forward_allowed:
-        #         return States.FORWARD
-        #     return self._current_state
+        if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
+            if self._forward_allowed:
+                return States.FORWARD
+            return self._current_state
         
         if self._left_emergency_turn and self._right_emergency_turn:
             if left > right:
@@ -233,17 +234,18 @@ class WallFollower:
         self._left_allowed = np.median(left) > self.ALLOWED_DISTANCE_TURN
         self._right_allowed = np.median(right) > self.ALLOWED_DISTANCE_TURN
         
-        # Turnaround in no exit corridor
-        if (all(forward < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and 
-            all(left < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and 
-            all(right < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND)):
-            self._current_state = States.TURNAROUND
-        
+
         # Emergency turn
         self._left_emergency_turn = min(forward_right) < self.FORWARD_TURN_EMERGENCY_DISTANCE
         self._right_emergency_turn = min(forward_left) < self.FORWARD_TURN_EMERGENCY_DISTANCE
         
         self._current_state = self._get_new_state(max(left), max(right))
+
+        # Turnaround in no exit corridor
+        if (np.median(forward < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and
+            np.median(left < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and
+                np.median(right < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND)):
+            self._current_state = States.TURNAROUND
         # self._current_state = States.TURNAROUND
         
         # if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
@@ -272,7 +274,7 @@ class WallFollower:
             v = 0.0
             w = 4.0
             
-        self._prev_error = self._error(right)
+        # self._prev_error = self._error(right)
             
         w_max: float = (self.LINEAR_SPEED_MAX - abs(min(self.MINIMUM_LINEAR_VELOCITY, v))) / (self.TRACK / 2)
         w = np.clip(w, -w_max, w_max)
