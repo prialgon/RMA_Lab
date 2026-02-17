@@ -88,7 +88,7 @@ class ParticleFilter:
         # TODO: 3.10. Complete the missing function body with your code.
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
-        
+
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -100,31 +100,31 @@ class ParticleFilter:
 
         """
         self._iteration += 1
-        
+
         old_positions = self._particles[:, [0, 1]].copy()
 
         # TODO: 3.5. Complete the function body with your code.
         delta_position: float = (v + np.random.normal(loc=0, scale=self._sigma_v)) * self._dt
         delta_rotation: float = (w + np.random.normal(loc=0, scale=self._sigma_w)) * self._dt
-        
+
         orientations = self._particles[:, 2]
-        
+
         delta_x = np.cos(orientations + delta_rotation) * delta_position
         delta_y = np.sin(orientations + delta_rotation) * delta_position
-        
+
         self._particles[:, 0] += delta_x
         self._particles[:, 1] += delta_y
         self._particles[:, 2] += delta_rotation
-        
+
         self._particles[:, 2] = np.mod(self._particles[:, 2], 2 * np.pi)
-        
+
         for idx, particle in enumerate(self._particles):
             segment = [old_positions[idx], particle[[0, 1]]]
             intersection = self._map.check_collision(segment, compute_distance=False)
-            
+
             if intersection:
-                self._particles[idx, [0, 1]] = intersection   
-         
+                self._particles[idx, [0, 1]] = intersection
+
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
 
@@ -134,7 +134,7 @@ class ParticleFilter:
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
         pass
-        
+
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
 
@@ -234,12 +234,40 @@ class ParticleFilter:
         particles = np.empty((particle_count, 3), dtype=object)
 
         # TODO: 3.4. Complete the missing function body with your code.
+        valid_particles = []
         x_min, y_min, x_max, y_max = self._map.bounds()
-        
-        particles[:, 0] = np.random.uniform(x_min, x_max, size=particle_count)
-        particles[:, 1] = np.random.uniform(y_min, y_max, size=particle_count)
-        particles[:, 2] = np.random.choice([0, np.pi/2, np.pi, 3*np.pi/2], replace=True, size=particle_count) 
-        
+        while len(valid_particles) < particle_count:
+            # count missing particles
+            needed = particle_count - len(valid_particles)
+
+            # oversample not to run this loop many times
+            batch_size = int(needed * 2.0)
+
+            if global_localization:
+                x_cand = np.random.uniform(x_min, x_max, size=batch_size)
+                y_cand = np.random.uniform(y_min, y_max, size=batch_size)
+            else:
+                # random (normal) noise
+                x_cand = np.random.normal(initial_pose[0], initial_pose_sigma[0], size=batch_size)
+                y_cand = np.random.normal(initial_pose[1], initial_pose_sigma[1], size=batch_size)
+
+            # verify the particles are valid
+            for x, y in zip(x_cand, y_cand):
+                if self._map.contains((x, y)):
+                    valid_particles.append((x, y))
+                    if len(valid_particles) == particle_count:
+                        break
+
+        particles_xy = np.array(valid_particles)
+
+        particles[:, 0] = particles_xy[:, 0]
+        particles[:, 1] = particles_xy[:, 1]
+
+        # add theta
+        particles[:, 2] = np.random.choice(
+            [0, np.pi / 2, np.pi, 3 * np.pi / 2], size=particle_count
+        )
+
         return particles
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
@@ -255,11 +283,11 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
         n: int = 16
-        rays = self._lidar_rays(pose, np.arange(n).tolist(), degree_increment=360/n)
-        
+        rays = self._lidar_rays(pose, np.arange(n).tolist(), degree_increment=360 / n)
+
         for ray in rays:
             z_hat.append(self._map.check_collision(ray, compute_distance=True)[1])
-        
+
         return z_hat
 
     @staticmethod
@@ -276,8 +304,8 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return 1/(np.sqrt(2 * np.pi) * sigma) * np.exp(-(x - mu)**2/(1/(2*sigma**2)))
-        
+        return 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-((x - mu) ** 2) / (1 / (2 * sigma**2)))
+
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
     ) -> list[list[tuple[float, float]]]:
@@ -330,15 +358,14 @@ class ParticleFilter:
         probability = 1.0
 
         # TODO: 3.8. Complete the missing function body with your code.
-        
+
         n: int = 16
-        
-        rays = range(0, len(measurements), 360//n)
-        
+
+        rays = range(0, len(measurements), 360 // n)
+
         z_hat: list[float] = self._sense(particle)
-        
+
         for idx in rays:
             probability *= self._gaussian(z_hat[idx], self._sigma_z, measurements[idx])
-        
-        
+
         return probability

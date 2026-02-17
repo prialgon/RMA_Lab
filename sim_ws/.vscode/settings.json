@@ -26,4 +26,7 @@
         "**/log": true
     },
     "ROS2.distro": "humble",
+    "python-envs.defaultEnvManager": "ms-python.python:system",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+    "python-envs.pythonProjects": [],
 }
