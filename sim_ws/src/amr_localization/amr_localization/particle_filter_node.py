@@ -94,6 +94,11 @@ class ParticleFilterNode(LifecycleNode):
 
             # Publishers
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
+            self.pose_publisher = self.create_publisher(
+                PoseStamped,
+                "pose",
+                10
+            )
             
             # Subscribers
             scan_qos_profile = QoSProfile(
@@ -206,8 +211,24 @@ class ParticleFilterNode(LifecycleNode):
             theta_h: Heading estimate [rad].
 
         """
-        # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).       
+        msg: PoseStamped = PoseStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.localized = self._localized
+        
+        if self._localized:
+            quaternions = euler2quat(0, 0, theta_h)
+            
+            msg.pose.position.x = x_h
+            msg.pose.position.y = y_h
+
+            msg.pose.orientation.w = quaternions[0]
+            msg.pose.orientation.x = quaternions[1]
+            msg.pose.orientation.y = quaternions[2]
+            msg.pose.orientation.z = quaternions[3]
+        
+        self.pose_publisher.publish(msg)
+        
         
 
 def main(args=None):
