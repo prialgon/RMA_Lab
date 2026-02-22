@@ -16,7 +16,7 @@ class OdometryNode(LifecycleNode):
         self._last_pos_x: float = None
         self._last_pos_y: float = None
         self._last_time: float = None 
-        self._last_angular_w: float = None
+        self._last_angle: float = None
 
         self._odometry_subscriber = self.create_subscription(
             msg_type=Odometry,
@@ -55,11 +55,11 @@ class OdometryNode(LifecycleNode):
         _, _, th_h = quat2euler((quat_w, quat_x, quat_y, quat_z))
         th_h %= 2 * math.pi
         
-        if self._last_pos_x is None or self._last_pos_y is None or self._last_time is None or self._last_angular_w is None:
+        if self._last_pos_x is None or self._last_pos_y is None or self._last_time is None or self._last_angle is None:
             self._last_pos_x = pos_x
             self._last_pos_y = pos_y
             self._last_time = time
-            self._last_angular_w = th_h
+            self._last_angle = th_h
             return None
 
         dt: float = time - self._last_time
@@ -70,21 +70,21 @@ class OdometryNode(LifecycleNode):
         vel_x: float = v_global_x * math.cos(th_h) + v_global_y * math.sin(th_h)
         vel_y: float = -v_global_x * math.sin(th_h) + v_global_y * math.cos(th_h)
         
-        vel_angular: float = (th_h - self._last_angular_w)/dt
+        angular_vel: float = (th_h - self._last_angle)/dt
         
         odometry_msg: Odometry = Odometry()
         odometry_msg.header = msg.header
         odometry_msg.child_frame_id = msg.child_frame_id
         odometry_msg.twist.twist.linear.x = vel_x
         odometry_msg.twist.twist.linear.y = vel_y
-        odometry_msg.twist.twist.angular.z = vel_angular
+        odometry_msg.twist.twist.angular.z = angular_vel
         
         self._odometry_publisher.publish(odometry_msg)
         
         self._last_pos_x = pos_x
         self._last_pos_y = pos_y
         self._last_time = time
-        self._last_angular_w = th_h
+        self._last_angle = th_h
         
 def main(args=None):
     rclpy.init(args=args)
