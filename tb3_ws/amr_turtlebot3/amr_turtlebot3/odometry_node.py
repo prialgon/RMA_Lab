@@ -18,20 +18,21 @@ class OdometryNode(LifecycleNode):
         self._last_time: float = None 
         self._last_angle: float = None
 
+        
+        
+    def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self._odometry_subscriber = self.create_subscription(
             msg_type=Odometry,
             topic="odom",
             callback=self._handle_odometry,
             qos_profile=10,
         )
-        
+
         self._odometry_publisher = self.create_publisher(
             msg_type=Odometry,
             topic="odometry",
             qos_profile=10,
         )
-        
-    def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         return super().on_configure(state)
 
     def on_activate(self,  state: LifecycleState) -> TransitionCallbackReturn:
