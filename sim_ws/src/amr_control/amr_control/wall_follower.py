@@ -8,73 +8,61 @@ class States(Enum):
     FORWARD = 1
     LEFT = 2
     RIGHT = 3
-    FORWARD_LEFT = 4
-    FORWARD_RIGHT = 5
-    TURNAROUND = 6
+    TURNAROUND = 4
+    FORWARD_LEFT = 5
+    FORWARD_RIGHT = 6
 
 
 class WallFollower:
     """Class to safely explore an environment (without crashing) when the pose is unknown."""
 
     # Robot limits
-    LINEAR_SPEED_MAX = 0.22  # Maximum linear velocity in the abscence of angular velocity [m/s]
+    # Maximum linear velocity in the abscence of angular velocity [m/s]
+    LINEAR_SPEED_MAX = 0.22
     SENSOR_RANGE_MIN = 0.16  # Minimum LiDAR sensor range [m]
     SENSOR_RANGE_MAX = 8.0  # Maximum LiDAR sensor range [m]
     TRACK = 0.16  # Distance between same axle wheels [m]
     WHEEL_RADIUS = 0.033  # Radius of the wheels [m]
-    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS  # Maximum motor angular speed [rad/s]
-    MINIMUM_LINEAR_VELOCITY = 0.5 * LINEAR_SPEED_MAX  # Minimum linear velocity [m/s]
+    # Maximum motor angular speed [rad/s]
+    WHEEL_SPEED_MAX = LINEAR_SPEED_MAX / WHEEL_RADIUS
 
     # LiDAR angles
-    LIDAR_FORWARD_ANGLE = 5  # Angle for forward area [º]
-    LIDAR_DEADZONE_TOP = 30  # Angle for area between forward and forward diagonal [º]
-    LIDAR_DIAGONAL_ANGLE = 5  # Angle for forward diagonal area [º]
-    LIDAR_DEADZONE_BOTTOM = 40  # Angle for area between forward diagonal and side
-    LIDAR_SIDE_ANGLE = 10  # Angle for side area [º]
-    LIDAR_FILL_ANGLE = 180  # Angle for no-read zone [º]
+    LIDAR_X_ANGLE = 5 * np.pi / 180  # Angle for x-axis [rad]
+    LIDAR_Z_ANGLE = 10 * np.pi / 180  # Angle for z-axis [rad]
+    LIDAR_FILL_ANGLE = 180 * np.pi / 180  # Angle for no-read zone [rad]
+    # Angle for area between forward and side [rad]
+    LIDAR_DEADZONE = 32.5 * np.pi / 180
+    LIDAR_XZ_ANGLE = 10 * np.pi / 180
 
     # Distance control
-    MAX_DISTANCE_FORWARD = 0.40  # Distance to objects forward [m]
-    MAX_DISTANCE_FORWARD_WHILE_IN_TURN = 0.35  # Distance to objects forward while turning [m]
-    MAX_DISTANCE_TURN = 0.30  # Distance to objects on sides [m]
-    MAX_DISTANCE_FORWARD_DIAGONAL_TURNING = 0.22  # Distance to wall for diagonal turning [m]
-    MAX_DISTANCE_FORWARD_TURNAROUND = 0.18  # Distance to activate forward turnaround [m]
+    OBJECTIVE_DISTANCE_WALL = 0.18  # Distance to wall [m]
+    ALLOWED_DISTANCE_FORWARD = 0.38  # Distance to objects forward [m]
+    ALLOWED_DISTANCE_FORWARD_IN_TURN = 0.28  # Distance to objects forward [m]
+    ALLOWED_DISTANCE_TURN = 0.35  # Distance to objects on sides [m]
+    ALLOWED_DISTANCE_FORWARD_TURN = 0.22
+    EMERGENCY_DISTANCE_TURNAROUND = 0.18  # Distance to activate turnaround [m]
     # FORWARD_TURN_EMERGENCY_DISTANCE = 0.16 # Distance to forward corner [m]
+    # Distance to all walls [m]
+    FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND = 0.16
 
     # PD Control
-    PD_OBJECTIVE_DISTANCE_TO_WALL = 0.18  # Distance to wall [m]
-    KP = 2.0
-    KD = 2.0
+    # SIDE_POINTS = 10 # Number of points to get
+    KP = 1.5
+    KD = 4.0
 
     # Velocity Control
-    FORWARD_LINEAR_VELOCITY = 0.8 * LINEAR_SPEED_MAX  # Forward linear velocity [m/s]
-    FORWARD_LINEAR_TURN_VELOCITY = 0.6 * LINEAR_SPEED_MAX  # Forward linear velocity in turn [m/s]
-    TURN_LINEAR_VELOCITY = 0.5 * LINEAR_SPEED_MAX  # Turning linear velocity [m/s]
+    MINIMUM_LINEAR_VELOCITY = 0.3 * LINEAR_SPEED_MAX
+    # Forward linear velocity [m/s]
+    FORWARD_LINEAR_VELOCITY = 0.8 * LINEAR_SPEED_MAX
+    # Forward linear velocity while turning [m/s]
+    FORWARD_LINEAR_TURN_VELOCITY = 0.5 * LINEAR_SPEED_MAX
+    # Turning linear velocity [m/s]
+    TURN_LINEAR_VELOCITY = 0.3 * LINEAR_SPEED_MAX
 
     # Angular Control
-    FORWARD_TURNING_ANGULAR_VELOCITY = 1.0  # Forward turning angular velocity [rad/s]
-    TURN_ANGULAR_VELOCITY = 1.4  # Turning angular velocity [rad/s]
+    FORWARD_TURNING_ANGULAR_VELOCITY = 1.6
+    TURN_ANGULAR_VELOCITY = 1.9  # Turning angular velocity [rad/s]
     TURNAROUND_ANGULAR_VELOCITY = 2.0  # Turnaroud angular velocity [rad/s]
-
-    # ----- DO NOT CHANGE -----
-    # ASSERTIONS FOR CHECKS
-    assert 360 == (
-        2 * LIDAR_FORWARD_ANGLE
-        + 2 * LIDAR_SIDE_ANGLE
-        + 2 * LIDAR_DEADZONE_TOP
-        + 2 * LIDAR_DEADZONE_BOTTOM
-        + 2 * LIDAR_DIAGONAL_ANGLE
-        + LIDAR_FILL_ANGLE
-    )
-
-    # LiDAR angles
-    LIDAR_FORWARD_ANGLE *= np.pi / 180
-    LIDAR_DEADZONE_TOP *= np.pi / 180
-    LIDAR_DIAGONAL_ANGLE *= np.pi / 180
-    LIDAR_DEADZONE_BOTTOM *= np.pi / 180
-    LIDAR_SIDE_ANGLE *= np.pi / 180
-    LIDAR_FILL_ANGLE *= np.pi / 180
-    # --------------------------
 
     def __init__(
         self, dt: float, logger: RcutilsLogger | None = None, simulation: bool = False
@@ -107,9 +95,7 @@ class WallFollower:
 
         self.increment: float = 360 / 240 * np.pi / 180
 
-    def _get_lidar_areas(
-        self, ranges: list[float]
-    ) -> tuple[
+    def _get_lidar_areas(self, ranges: list[float]) -> tuple[
         numpy.typing.NDArray,
         numpy.typing.NDArray,
         numpy.typing.NDArray,
@@ -121,64 +107,70 @@ class WallFollower:
         # 1. ========== FORWARD FIRST RANGE - 0:x_angle ==========
         forward_range_1_start: int = 0
         forward_range_1_end: int = forward_range_1_start + int(
-            self.LIDAR_FORWARD_ANGLE / self.increment
+            self.LIDAR_X_ANGLE / self.increment
         )
         # ====================================================================
 
         # 2. ========== LEFT TOP DEADZONE - x_angle:x_angle+deadzone ==========
         deadzone_left_1_start: int = forward_range_1_end
         deadzone_left_1_end: int = deadzone_left_1_start + int(
-            self.LIDAR_DEADZONE_TOP / self.increment
+            self.LIDAR_DEADZONE / self.increment
         )
         # ====================================================================
 
         # 3. ========== FORWARD LEFT - x_angle+deadzone:x_left_forward ==========
         forward_left_range_start: int = deadzone_left_1_end
         forward_left_range_end: int = forward_left_range_start + int(
-            self.LIDAR_DIAGONAL_ANGLE / self.increment
+            self.LIDAR_XZ_ANGLE / self.increment
         )
         # ====================================================================
 
         # 4. ========== LEFT DOWN DEADZONE - x_left_forward:x_left_forward+deadzone ==========
         deadzone_left_2_start: int = forward_left_range_end
         deadzone_left_2_end: int = deadzone_left_2_start + int(
-            self.LIDAR_DEADZONE_BOTTOM / self.increment
+            self.LIDAR_DEADZONE / self.increment
         )
         # ====================================================================
 
         # 5. ========== LEFT - x_left_forward+deadzone:x_left ==========
         left_range_start: int = deadzone_left_2_end
-        left_range_end: int = left_range_start + int(self.LIDAR_SIDE_ANGLE / self.increment)
+        left_range_end: int = left_range_start + int(
+            self.LIDAR_Z_ANGLE / self.increment
+        )
         # ====================================================================
 
         # 6. ========== FILL - 90:270 (Back of robot) ==========
         fill_range_start: int = left_range_end
-        fill_range_end: int = fill_range_start + int(self.LIDAR_FILL_ANGLE / self.increment)
+        fill_range_end: int = fill_range_start + int(
+            self.LIDAR_FILL_ANGLE / self.increment
+        )
         # ====================================================================
 
         # 7. ========== RIGHT - fill:x_right ==========
         right_range_start: int = fill_range_end
-        right_range_end: int = right_range_start + int(self.LIDAR_SIDE_ANGLE / self.increment)
+        right_range_end: int = right_range_start + int(
+            self.LIDAR_Z_ANGLE / self.increment
+        )
         # ====================================================================
 
         # 8. ========== RIGHT DOWN DEADZONE - x_right:x_right+deadzone ==========
         deadzone_right_2_start: int = right_range_end
         deadzone_right_2_end: int = deadzone_right_2_start + int(
-            self.LIDAR_DEADZONE_BOTTOM / self.increment
+            self.LIDAR_DEADZONE / self.increment
         )
         # ====================================================================
 
         # 9. ========== FORWARD RIGHT - x_right+deadzone:x_right_forward ==========
         forward_right_range_start: int = deadzone_right_2_end
         forward_right_range_end: int = forward_right_range_start + int(
-            self.LIDAR_DIAGONAL_ANGLE / self.increment
+            self.LIDAR_XZ_ANGLE / self.increment
         )
         # ====================================================================
 
         # 10. ========== RIGHT TOP DEADZONE - x_right_forward:x_right_forward+deadzone ==========
         deadzone_right_1_start: int = forward_right_range_end
         deadzone_right_1_end: int = deadzone_right_1_start + int(
-            self.LIDAR_DEADZONE_TOP / self.increment
+            self.LIDAR_DEADZONE / self.increment
         )
         # ====================================================================
 
@@ -223,23 +215,11 @@ class WallFollower:
     def _get_new_state(
         self, left: float, right: float, forward_left: float, forward_right: float
     ) -> States:
-        if not self._left_allowed and not self._right_allowed and not self._forward_allowed:
-            return States.TURNAROUND
 
         if self._current_state in [States.TURNAROUND, States.RIGHT, States.LEFT]:
             if self._forward_allowed:
                 return States.FORWARD
             return self._current_state
-
-        # if self._left_emergency_turn and self._right_emergency_turn:
-        #     if left > right:
-        #         return States.LEFT
-        #     else:
-        #         return States.RIGHT
-        # elif self._left_emergency_turn:
-        #     return States.LEFT
-        # elif self._right_emergency_turn:
-        #     return States.RIGHT
 
         if self._forward_allowed:
             return States.FORWARD
@@ -267,18 +247,26 @@ class WallFollower:
             if self._left_allowed:
                 return States.LEFT
 
+        if not self._left_allowed and not self._right_allowed:
+            return States.TURNAROUND
         return self._current_state
 
     def _error(self, points: np.ndarray) -> float:
-        return float(np.median(points)) - self.PD_OBJECTIVE_DISTANCE_TO_WALL
+        return (
+            np.clip(float(np.median(points)), -0.5, 0.5) -
+            self.OBJECTIVE_DISTANCE_WALL
+        )
 
-    def _get_pd(self, points: np.ndarray) -> float:
-        error: float = self._error(points)
+    def _get_pd(self, error: float) -> float:
+        if self._prev_error == None:
+            self._prev_error = error
         de = (error - self._prev_error) / self._dt
         self._prev_error = error
         return -(self.KP * error + self.KD * de)
 
-    def compute_commands(self, z_scan: list[float], z_v: float, z_w: float) -> tuple[float, float]:
+    def compute_commands(
+        self, z_scan: list[float], z_v: float, z_w: float
+    ) -> tuple[float, float]:
         """Wall following exploration algorithm.
 
         Args:
@@ -293,15 +281,15 @@ class WallFollower:
 
         """
         # TODO: 2.14. Complete the function body with your code (i.e., compute v and w).
-
-        # Logging
-        # if self._logger is not None:
-        #     self._logger.warn(f"STATE - {self._current_state}")
+        self.increment = 360 / len(z_scan) * np.pi / \
+            180  # Angle increment [rad]
 
         v: float = 0.0
         w: float = 0.0
 
-        forward, left, right, forward_left, forward_right = self._get_lidar_areas(z_scan)
+        forward, left, right, forward_left, forward_right = self._get_lidar_areas(
+            z_scan
+        )
 
         if (
             len(forward) < 1
@@ -314,84 +302,89 @@ class WallFollower:
 
         # Forward allowed
         if self._current_state not in [States.LEFT, States.RIGHT]:
-            self._forward_allowed = bool(np.median(forward) > self.MAX_DISTANCE_FORWARD)
+            self._forward_allowed = np.median(
+                forward) > self.ALLOWED_DISTANCE_FORWARD
             self._forward_turning = False
         else:  # Forward turning allowed
-            self._forward_allowed = bool(
-                np.median(forward) > self.MAX_DISTANCE_FORWARD_WHILE_IN_TURN
-            )
+            self._forward_allowed = max(
+                forward) > self.ALLOWED_DISTANCE_FORWARD_IN_TURN
             self._forward_turning = True
 
         # Forward turning allowed
-        self._forward_left_allowed = bool(
-            np.median(forward_left) > self.MAX_DISTANCE_FORWARD_DIAGONAL_TURNING
+        self._forward_left_allowed = (
+            np.median(forward_left) > self.ALLOWED_DISTANCE_FORWARD_TURN
         )
-        self._forward_right_allowed = bool(
-            np.median(forward_right) > self.MAX_DISTANCE_FORWARD_DIAGONAL_TURNING
+        self._forward_right_allowed = (
+            np.median(forward_right) > self.ALLOWED_DISTANCE_FORWARD_TURN
         )
 
         # Turning allowed
-        self._left_allowed = bool(np.median(left) > self.MAX_DISTANCE_TURN)
-        self._right_allowed = bool(np.median(right) > self.MAX_DISTANCE_TURN)
+        self._left_allowed = np.median(left) > self.ALLOWED_DISTANCE_TURN
+        self._right_allowed = np.median(right) > self.ALLOWED_DISTANCE_TURN
+
+        # Turnaround in no exit corridor
+        # if (all(forward < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and
+        #     all(left < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND) and
+        #     all(right < self.FORWARD_NO_EXIT_CORRIDOR_DISTANCE_TURNAROUND)):
+        #     self._current_state = States.TURNAROUND
 
         # Emergency turn
         # self._left_emergency_turn = np.median(forward_right) < self.FORWARD_TURN_EMERGENCY_DISTANCE
         # self._right_emergency_turn = np.median(forward_left) < self.FORWARD_TURN_EMERGENCY_DISTANCE
 
         self._current_state = self._get_new_state(
-            max(left), max(right), float(np.median(forward_left)), float(np.median(forward_right))
+            max(left), max(right), np.median(
+                forward_left), np.median(forward_right)
         )
+        # self._current_state = States.TURNAROUND
 
-        # If danger forward and not turning --> Turnaround
-        if min(forward) < self.MAX_DISTANCE_FORWARD_TURNAROUND and self._current_state not in [
-            States.LEFT,
-            States.RIGHT,
-        ]:
-            self._current_state = States.TURNAROUND
+        # if min(forward) < self.EMERGENCY_DISTANCE_TURNAROUND:
+        #     self._current_state = States.TURNAROUND
 
-        # ========== STATE MACHINE ==========
-        match self._current_state:
-            # ----- FORWARD -----
-            case States.FORWARD:
-                if not self._forward_turning:
-                    v = self.FORWARD_LINEAR_VELOCITY
-                else:
-                    v = self.FORWARD_LINEAR_TURN_VELOCITY
-
-                w = self._get_pd(right)
-
-            # ----- FORWARD LEFT -----
-            case States.FORWARD_LEFT:
+        if self._current_state == States.FORWARD:
+            if not self._forward_turning:
+                v = self.FORWARD_LINEAR_VELOCITY
+            else:
                 v = self.FORWARD_LINEAR_TURN_VELOCITY
-                w = self.FORWARD_TURNING_ANGULAR_VELOCITY
 
-            # ----- FORWARD RIGHT -----
-            case States.FORWARD_RIGHT:
-                v = self.FORWARD_LINEAR_TURN_VELOCITY
-                w = -self.FORWARD_TURNING_ANGULAR_VELOCITY
+            right_error: float = self._error(right)
+            w = self._get_pd(right_error)
+        elif self._current_state == States.FORWARD_LEFT:
+            self._prev_error = None
+            v = self.FORWARD_LINEAR_TURN_VELOCITY
+            w = self.FORWARD_TURNING_ANGULAR_VELOCITY
+        elif self._current_state == States.FORWARD_RIGHT:
+            self._prev_error = None
+            v = self.FORWARD_LINEAR_TURN_VELOCITY
+            w = -self.FORWARD_TURNING_ANGULAR_VELOCITY
+        elif self._current_state == States.LEFT:
+            self._prev_error = None
+            v = self.TURN_LINEAR_VELOCITY
+            w = self.TURN_ANGULAR_VELOCITY
+        elif self._current_state == States.RIGHT:
+            self._prev_error = None
+            v = self.TURN_LINEAR_VELOCITY
+            w = -self.TURN_ANGULAR_VELOCITY
+        elif self._current_state == States.TURNAROUND:
+            self._prev_error = None
+            v = 0.0
+            w = self.TURNAROUND_ANGULAR_VELOCITY
 
-            # ----- LEFT -----
-            case States.LEFT:
-                v = self.TURN_LINEAR_VELOCITY
-                w = self.TURN_ANGULAR_VELOCITY
-
-            # ----- RIGHT -----
-            case States.RIGHT:
-                v = self.TURN_LINEAR_VELOCITY
-                w = -self.TURN_ANGULAR_VELOCITY
-
-            # ----- TURNAROUND -----
-            case States.TURNAROUND:
-                v = 0.0
-                w = self.TURNAROUND_ANGULAR_VELOCITY
-
-        # ---- LIMIT W and V -----
-        w_max: float = (self.LINEAR_SPEED_MAX - abs(min(self.MINIMUM_LINEAR_VELOCITY, v))) / (
-            self.TRACK / 2
-        )
+        w_max: float = (
+            self.LINEAR_SPEED_MAX - abs(min(self.MINIMUM_LINEAR_VELOCITY, v))
+        ) / (self.TRACK / 2)
+        old_w_max = w_max
         w = np.clip(w, -w_max, w_max)
 
         v_best: float = self.LINEAR_SPEED_MAX - (abs(w) * (self.TRACK / 2))
+
+        # Logging
+        if self._logger is not None:
+            # self._logger.warn(str(np.median(left)))
+            self._logger.warn(
+                f"Linear velocity HIGH - {v > v_best}, Angular velocity HIGH - {abs(old_w_max) > abs(w)}, STATE - {self._current_state}"
+            )
+
         v = min(v, v_best)
 
         return v, w
