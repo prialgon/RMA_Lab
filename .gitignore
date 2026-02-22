@@ -1,7 +1,11 @@
 # ROS
-build/
-install/
-log/
+*/build/
+*/install/
+*/log/
 
 # Python
 __pycache__/
+
+# Videos
+*.mov
+*.zip
