@@ -88,7 +88,28 @@ class ParticleFilter:
         # TODO: 3.10. Complete the missing function body with your code.
         localized: bool = False
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
-
+        
+        particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
+        
+        clusters = DBSCAN().fit(particles_with_approx)
+        
+        print(len(self._particles))
+        
+        if len(set(clusters.labels_)) == 1:
+            localized = True
+            pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
+            theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
+            pose = (pose_calculation[0], pose_calculation[1], theta_mean)
+            self._init_particles(
+                50, 
+                global_localization=False, 
+                initial_pose=pose, 
+                initial_pose_sigma=(self._sigma_v, self._sigma_w, self._sigma_z)
+            )
+        else:
+            max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
+            pose = self._particles[clusters.labels_ == max_count_cluster].mean(axis=0)
+            
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -120,7 +141,7 @@ class ParticleFilter:
 
         for idx, particle in enumerate(self._particles):
             segment = [old_positions[idx], particle[[0, 1]]]
-            intersection = self._map.check_collision(segment, compute_distance=False)
+            intersection, _ = self._map.check_collision(segment, compute_distance=False)
 
             if intersection:
                 self._particles[idx, [0, 1]] = intersection
@@ -133,7 +154,25 @@ class ParticleFilter:
 
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        
+        weights: list[float] = []
+        
+        for particle in self._particles:
+            w: float = self._measurement_probability(measurements, particle)
+            weights.append(w)
+            
+        bins = np.cumsum(weights)
+        
+        W: float = np.sum(weights)
+        
+        u_0: float = np.random.uniform(low=0, high=W/self._particle_count)
+        
+        u = u_0 + np.arange(self._particle_count) * W/self._particle_count
+            
+        idx = np.digitize(u, bins)
+        
+        self._particles = self._particles[idx]
+            
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
@@ -231,7 +270,7 @@ class ParticleFilter:
         Returns: A NumPy array of tuples (x, y, theta) [m, m, rad].
 
         """
-        particles = np.empty((particle_count, 3), dtype=object)
+        particles = np.empty((particle_count, 3), dtype=float)
 
         # TODO: 3.4. Complete the missing function body with your code.
         valid_particles = []
@@ -304,7 +343,7 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-        return 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-((x - mu) ** 2) / (1 / (2 * sigma**2)))
+        return 1 / (np.sqrt(2 * np.pi) * sigma) * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
@@ -365,7 +404,7 @@ class ParticleFilter:
 
         z_hat: list[float] = self._sense(particle)
 
-        for idx in rays:
-            probability *= self._gaussian(z_hat[idx], self._sigma_z, measurements[idx])
+        for idx, ray in enumerate(rays):
+            probability *= self._gaussian(z_hat[idx], self._sigma_z, measurements[ray])
 
         return probability
