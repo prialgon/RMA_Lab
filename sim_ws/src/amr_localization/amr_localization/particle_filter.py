@@ -93,14 +93,13 @@ class ParticleFilter:
         
         clusters = DBSCAN().fit(particles_with_approx)
         
-        print(len(self._particles))
         
         if len(set(clusters.labels_)) == 1:
             localized = True
             pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
-            self._init_particles(
+            self._particles = self._init_particles(
                 50, 
                 global_localization=False, 
                 initial_pose=pose, 
