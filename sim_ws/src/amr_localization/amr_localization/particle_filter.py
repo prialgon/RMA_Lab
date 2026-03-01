@@ -400,7 +400,7 @@ class ParticleFilter:
 
         n: int = 16
 
-        rays = range(0, len(measurements), 360 // n)
+        rays = range(0, len(measurements), len(measurements) // n)
 
         z_hat: list[float] = self._sense(particle)
 
