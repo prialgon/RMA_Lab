@@ -9,3 +9,6 @@ __pycache__/
 # Videos
 *.mov
 *.zip
+
+# Generated images
+sim_ws/src/amr_localization/images/
