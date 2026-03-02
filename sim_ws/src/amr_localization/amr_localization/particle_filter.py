@@ -94,20 +94,19 @@ class ParticleFilter:
         clusters = DBSCAN().fit(particles_with_approx)
         
         
-        if len(set(clusters.labels_)) == 1:
-            localized = True
+        if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
+            
             pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
-            self._particles = self._init_particles(
-                50, 
-                global_localization=False, 
-                initial_pose=pose, 
-                initial_pose_sigma=(self._sigma_v, self._sigma_w, self._sigma_z)
-            )
+            
+            self._particles = self._particles[:50]
+            localized = True
         else:
             max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
-            pose = self._particles[clusters.labels_ == max_count_cluster].mean(axis=0)
+            pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(axis=0)
+            theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
+            pose = (pose_calculation[0], pose_calculation[1], theta_mean)
             
         return localized, pose
 
@@ -399,6 +398,7 @@ class ParticleFilter:
 
         n: int = 16
 
+        measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
         rays = range(0, len(measurements), len(measurements) // n)
 
         z_hat: list[float] = self._sense(particle)
