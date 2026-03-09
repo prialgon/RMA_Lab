@@ -3,7 +3,7 @@ from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackRet
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, AllowMove
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
 
@@ -88,6 +88,9 @@ class ParticleFilterNode(LifecycleNode):
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )
+            
+            self.z_scan: list[float] = []
+            self.z_odom: list[tuple[float, float]] = []
 
             if self._enable_plot:
                 self._particle_filter.show("Initialization", save_figure=True)
@@ -108,16 +111,42 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
-            self._subscribers: list[message_filters.Subscriber] = []
-            self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
-            self._subscribers.append(
-                message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
-            )
+            # self._subscribers: list[message_filters.Subscriber] = []
+            # self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
+            # self._subscribers.append(
+            #     message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
+            # )
 
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers, queue_size=10, slop=9
+            # ts = message_filters.ApproximateTimeSynchronizer(
+            #     self._subscribers, queue_size=10, slop=9
+            # )
+            # ts.registerCallback(self._compute_pose_callback)
+            
+            self.laser_scan_subscriber = self.create_subscription(
+                LaserScan,
+                "scan",
+                qos_profile=scan_qos_profile,
+                callback=self._compute_scan_callback,
             )
-            ts.registerCallback(self._compute_pose_callback)
+            
+            self.odometry_subscriber = self.create_subscription(
+                Odometry,
+                "odometry",
+                qos_profile=10,
+                callback=self._compute_odometry_callback,
+            )
+            
+            # 3.11
+            self.allowed_movement_publisher = self.create_publisher(
+                AllowMove, 
+                topic="allow_move", 
+                qos_profile=10,
+            )
+            
+            self.create_timer(
+                timer_period_sec=5,
+                callback=self._timer_callback,
+            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -135,7 +164,39 @@ class ParticleFilterNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+    
+    def _compute_scan_callback(self, scan_msg: LaserScan) -> None:
+        self.z_scan = list(scan_msg.ranges)
+    
+    def _compute_odometry_callback(self, odom_msg: Odometry) -> None:
+        z_v: float = odom_msg.twist.twist.linear.x
+        z_w: float = odom_msg.twist.twist.angular.z
+        
+        if abs(z_v) < 1e-3 and abs(z_w) < 1e-3:
+            return None
+        
+        self.z_odom.append((z_v, z_w))
+        
+    def _timer_callback(self):
+        msg: AllowMove = AllowMove()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.allowed = False
+        self.allowed_movement_publisher.publish(msg)
+        
+        for z_v, z_w in self.z_odom:
+            self._execute_motion_step(z_v, z_w)
+            self._steps += 1
 
+        x_h, y_h, theta_h = self._execute_measurement_step(self.z_scan)
+        
+        msg: AllowMove = AllowMove()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.allowed = True
+        self.allowed_movement_publisher.publish(msg)
+        
+        self._publish_pose_estimate(x_h, y_h, theta_h)
+            
+        
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
 
@@ -227,8 +288,7 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.y = quaternions[2]
             msg.pose.orientation.z = quaternions[3]
         
-        self.pose_publisher.publish(msg)
-        
+        self.pose_publisher.publish(msg)    
         
 
 def main(args=None):

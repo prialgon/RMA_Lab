@@ -3,7 +3,7 @@ from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackRet
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy, qos_profile_sensor_data
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, AllowMove
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -85,6 +85,16 @@ class WallFollowerNode(LifecycleNode):
             
             ts.registerCallback(self._compute_commands_callback)
             
+            # 3.11
+            self.allowed_move: bool = False
+            
+            self.allow_move_subscriber = self.create_subscription(
+                AllowMove,
+                topic="allow_move",
+                qos_profile=10,
+                callback=self._compute_allow_move_callback
+            )
+            
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
         except Exception:
@@ -129,6 +139,10 @@ class WallFollowerNode(LifecycleNode):
             v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
             self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
+            if not self.allowed_move:
+                v = 0.0
+                w = 0.0
+            
             # Publish
             self._publish_velocity_commands(v, w)
 
@@ -146,6 +160,9 @@ class WallFollowerNode(LifecycleNode):
         msg.twist.linear.x = v
         msg.twist.angular.z = w
         self._publisher_cmd_vel.publish(msg)
+        
+    def _compute_allow_move_callback(self, msg: AllowMove) -> None:
+        self.allowed_move = msg.allowed
         
 
 def main(args=None):
