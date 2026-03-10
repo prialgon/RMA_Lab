@@ -17,6 +17,7 @@ find_package(std_msgs REQUIRED)
 set(msg_files
   "msg/PoseStamped.msg"
   "msg/KeyLogger.msg"
+  "msg/AllowMove.msg"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

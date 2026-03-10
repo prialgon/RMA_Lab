@@ -388,8 +388,7 @@ class WallFollower:
         )
 
         if self._current_state not in [States.LEFT, States.RIGHT]:
-            self._forward_allowed = min(
-                forward) > self.SIM_ALLOWED_DISTANCE_FORWARD
+            self._forward_allowed = min(forward) > self.SIM_ALLOWED_DISTANCE_FORWARD
             self._forward_turning = False
         else:
             self._forward_allowed = (
@@ -478,8 +477,7 @@ class WallFollower:
         )
 
         self._left_allowed = np.median(left) > self.REAL_ALLOWED_DISTANCE_TURN
-        self._right_allowed = np.median(
-            right) > self.REAL_ALLOWED_DISTANCE_TURN
+        self._right_allowed = np.median(right) > self.REAL_ALLOWED_DISTANCE_TURN
 
         self._current_state = self._get_new_state(
             max(left),
