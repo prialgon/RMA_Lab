@@ -46,6 +46,8 @@ class PurePursuitNode(LifecycleNode):
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )
+            
+            self._path = []
 
             # Publishers
             self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
@@ -108,7 +110,7 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        self._pure_pursuit.path = path_msg.poses
         
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
