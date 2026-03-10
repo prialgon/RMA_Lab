@@ -399,11 +399,13 @@ class ParticleFilter:
         n: int = 16
 
         measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
-        rays = range(0, len(measurements), len(measurements) // n)
 
         z_hat: list[float] = self._sense(particle)
 
-        for idx, ray in enumerate(rays):
-            probability *= self._gaussian(z_hat[idx], self._sigma_z, measurements[ray])
+        step = len(measurements) // n
+        downsampled_measurements = [measurements[i] for i in range(0, n * step, step)]
+
+        for z_sensed, z_real in zip(z_hat, downsampled_measurements):
+            probability *= self._gaussian(z_sensed, self._sigma_z, z_real)
 
         return probability

@@ -27,7 +27,7 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("global_localization", True)
         self.declare_parameter("initial_pose", (0.0, 0.0, math.radians(0)))
         self.declare_parameter("initial_pose_sigma", (0.05, 0.05, math.radians(5)))
-        self.declare_parameter("particles", 1000)
+        self.declare_parameter("particles", 100)
         self.declare_parameter("sigma_v", 0.1)
         self.declare_parameter("sigma_w", 0.1)
         self.declare_parameter("sigma_z", 0.1)
@@ -148,6 +148,10 @@ class ParticleFilterNode(LifecycleNode):
                 callback=self._timer_callback,
             )
 
+            self._finished_flag = True
+
+            self._last_iter = 0
+
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -172,29 +176,34 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
         
-        if abs(z_v) < 1e-3 and abs(z_w) < 1e-3:
+        if abs(z_v) < 1e-2 and abs(z_w) < 1e-2:
             return None
         
         self.z_odom.append((z_v, z_w))
         
     def _timer_callback(self):
-        msg: AllowMove = AllowMove()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.allowed = False
-        self.allowed_movement_publisher.publish(msg)
-        
-        for z_v, z_w in self.z_odom:
-            self._execute_motion_step(z_v, z_w)
-            self._steps += 1
+        if self._finished_flag and (time.time() - self._last_iter) > 5:
+            self._finished_flag = False
+            msg: AllowMove = AllowMove()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.allowed = False
+            self.allowed_movement_publisher.publish(msg)
+            
+            for z_v, z_w in self.z_odom:
+                self._execute_motion_step(z_v, z_w)
+                self._steps += 1
 
-        x_h, y_h, theta_h = self._execute_measurement_step(self.z_scan)
-        
-        msg: AllowMove = AllowMove()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.allowed = True
-        self.allowed_movement_publisher.publish(msg)
-        
-        self._publish_pose_estimate(x_h, y_h, theta_h)
+            
+            x_h, y_h, theta_h = self._execute_measurement_step(self.z_scan)
+            self.z_odom = []
+            msg: AllowMove = AllowMove()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.allowed = True
+            self.allowed_movement_publisher.publish(msg)
+            
+            self._publish_pose_estimate(x_h, y_h, theta_h)
+            self._finished_flag = True
+            self._last_iter = time.time()
             
         
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
@@ -229,7 +238,8 @@ class ParticleFilterNode(LifecycleNode):
         """
         pose = (float("inf"), float("inf"), float("inf"))
 
-        if self._localized or not self._steps % self._steps_btw_sense_updates:
+        # if self._localized or not self._steps % self._steps_btw_sense_updates:
+        if True:
             start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
