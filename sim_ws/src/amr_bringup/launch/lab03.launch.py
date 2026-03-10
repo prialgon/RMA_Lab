@@ -5,10 +5,10 @@ import math
 
 
 def generate_launch_description():
-    simulation = True
+    simulation = False
     world = "lab03"
     start = (0.0, -0.8, math.radians(90))
-    particles = 2000
+    particles = 200
     sigma_v = 0.05
     sigma_w = 0.1
     sigma_z = 0.2
@@ -44,15 +44,15 @@ def generate_launch_description():
         parameters=[{"simulation": simulation}],
     )
 
-    coppeliasim_node = LifecycleNode(
-        package="amr_simulation",
-        executable="coppeliasim",
-        name="coppeliasim",
-        namespace="",
-        output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[{"enable_localization": True, "start": start}],
-    )
+    # coppeliasim_node = LifecycleNode(
+    #     package="amr_simulation",
+    #     executable="coppeliasim",
+    #     name="coppeliasim",
+    #     namespace="",
+    #     output="screen",
+    #     arguments=["--ros-args", "--log-level", "WARN"],
+    #     parameters=[{"enable_localization": True, "start": start}],
+    # )
 
     lifecycle_manager_node = Node(
         package="amr_bringup",
@@ -64,17 +64,27 @@ def generate_launch_description():
                 "node_startup_order": (
                     "particle_filter",
                     "wall_follower",
-                    "coppeliasim",  # Must be started last
+                    "odometry",  # Must be started last
                 )
             }
         ],
     )
 
+    odometry_node = LifecycleNode(
+        package="amr_turtlebot3",
+        executable="odometry_node",
+        name="odometry",
+        namespace="",
+        output="screen",
+        arguments=["--ros-args", "--log-level", "WARN"],
+    )
+
+
     return LaunchDescription(
         [
             particle_filter_node,
             wall_follower_node,
-            coppeliasim_node,
+            odometry_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )

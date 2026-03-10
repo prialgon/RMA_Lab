@@ -150,8 +150,6 @@ class ParticleFilterNode(LifecycleNode):
 
             self._finished_flag = True
 
-            self._last_iter = 0
-
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
             return TransitionCallbackReturn.ERROR
@@ -176,13 +174,12 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
         
-        if abs(z_v) < 1e-2 and abs(z_w) < 1e-2:
+        if abs(z_v) < 0.1 and abs(z_w) < 0.1:
             return None
-        
         self.z_odom.append((z_v, z_w))
         
     def _timer_callback(self):
-        if self._finished_flag and (time.time() - self._last_iter) > 5:
+        if self._finished_flag and len(self.z_odom)>0:
             self._finished_flag = False
             msg: AllowMove = AllowMove()
             msg.header.stamp = self.get_clock().now().to_msg()
@@ -195,7 +192,6 @@ class ParticleFilterNode(LifecycleNode):
 
             
             x_h, y_h, theta_h = self._execute_measurement_step(self.z_scan)
-            self.z_odom = []
             msg: AllowMove = AllowMove()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.allowed = True
@@ -203,7 +199,7 @@ class ParticleFilterNode(LifecycleNode):
             
             self._publish_pose_estimate(x_h, y_h, theta_h)
             self._finished_flag = True
-            self._last_iter = time.time()
+            self.z_odom.clear()
             
         
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
