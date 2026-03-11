@@ -367,7 +367,7 @@ class PRM:
         if not use_grid:
             nodes = []
             while len(nodes) < node_count:
-                random_node = np.random.uniform((x_min, y_min), (x_max, y_max)).round(3)
+                random_node = tuple(np.random.uniform((x_min, y_min), (x_max, y_max)).round(3))
                 if self._map.contains(random_node) and (random_node not in nodes):
                     nodes.append(random_node)
         else:
@@ -424,7 +424,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=250, grid_size=0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=True, node_count=750, grid_size=0.1, connection_distance=0.15)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
