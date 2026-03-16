@@ -74,6 +74,8 @@ class ParticleFilter:
             "%Y-%m-%d_%H-%M-%S"
         )
 
+        self._n_prev_clusters = particle_count
+
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
 
@@ -90,8 +92,8 @@ class ParticleFilter:
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
         
         particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
-        
-        clusters = DBSCAN().fit(particles_with_approx)
+        coords = self._particles[:, :2]
+        clusters = DBSCAN(eps=0.2).fit(coords)
         
         
         if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
@@ -100,13 +102,19 @@ class ParticleFilter:
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
             
-            self._particles = self._particles[:50]
+            if len(self._particles) > 50:
+                self._particles = self._init_particles(50, False, pose, (0.05, 0.05, math.radians(5)))
             localized = True
+            self._particle_count = 50
         else:
+            if len(set(clusters.labels_)) < self._n_prev_clusters:
+                self._particle_count = max(50, int(self._particle_count * 0.8))
+            
             max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
             pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
+            self._n_prev_clusters = len(set(clusters.labels_))
             
         return localized, pose
 
