@@ -5,7 +5,7 @@ import math
 
 
 def generate_launch_description():
-    simulation = True
+    simulation = False
     world = "lab03"
     start = (0.0, -0.8, math.radians(90))
     particles = 400
