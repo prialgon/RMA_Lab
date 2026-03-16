@@ -8,10 +8,10 @@ def generate_launch_description():
     simulation = False
     world = "lab03"
     start = (0.0, -0.8, math.radians(90))
-    particles = 400
+    particles = 1500
     sigma_v = 0.05
     sigma_w = 0.1
-    sigma_z = 0.2
+    sigma_z = 0.3
 
     particle_filter_node = LifecycleNode(
         package="amr_localization",

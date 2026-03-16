@@ -93,7 +93,7 @@ class ParticleFilter:
         
         particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
         coords = self._particles[:, :2]
-        clusters = DBSCAN(eps=0.2).fit(coords)
+        clusters = DBSCAN(eps=0.3).fit(coords)
         
         
         if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
@@ -129,15 +129,19 @@ class ParticleFilter:
         self._iteration += 1
 
         old_positions = self._particles[:, [0, 1]].copy()
+        
+        num_particles = self._particles.shape[0]
+        # self._logger.warn(f"ERR: {w}")
+        noise_v = np.random.normal(loc=0, scale=self._sigma_v, size=num_particles)
+        noise_w = np.random.normal(loc=-0.4, scale=self._sigma_w, size=num_particles)
 
-        # TODO: 3.5. Complete the function body with your code.
-        delta_position: float = (v + np.random.normal(loc=0, scale=self._sigma_v)) * self._dt
-        delta_rotation: float = (w + np.random.normal(loc=0, scale=self._sigma_w)) * self._dt
+        delta_position = (v + noise_v) * self._dt
+        delta_rotation = (w + noise_w) * self._dt
 
         orientations = self._particles[:, 2]
 
-        delta_x = np.cos(orientations + delta_rotation) * delta_position
-        delta_y = np.sin(orientations + delta_rotation) * delta_position
+        delta_x = np.cos(orientations + delta_rotation / 2.0) * delta_position
+        delta_y = np.sin(orientations + delta_rotation / 2.0) * delta_position
 
         self._particles[:, 0] += delta_x
         self._particles[:, 1] += delta_y
@@ -170,7 +174,7 @@ class ParticleFilter:
         bins = np.cumsum(weights)
         
         W: float = np.sum(weights)
-        
+        self._logger.warn(f"W: {W}; Count: {self._particle_count}")
         u_0: float = np.random.uniform(low=0, high=W/self._particle_count)
         
         u = u_0 + np.arange(self._particle_count) * W/self._particle_count
@@ -409,6 +413,12 @@ class ParticleFilter:
         measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
 
         z_hat: list[float] = self._sense(particle)
+        z_hat = np.nan_to_num(
+            z_hat, 
+            nan=self._sensor_range_max,
+            posinf=self._sensor_range_max, 
+            neginf=self._sensor_range_min
+        )
 
         step = len(measurements) // n
         downsampled_measurements = [measurements[i] for i in range(0, n * step, step)]

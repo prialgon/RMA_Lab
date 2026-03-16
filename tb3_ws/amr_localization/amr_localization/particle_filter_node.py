@@ -12,6 +12,7 @@ import os
 import time
 import traceback
 from transforms3d.euler import euler2quat
+import numpy as np
 
 from amr_localization.particle_filter import ParticleFilter
 
@@ -86,7 +87,7 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose=initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
             
             self.z_scan: list[float] = []
@@ -191,6 +192,9 @@ class ParticleFilterNode(LifecycleNode):
             msg.allowed = False
             self.allowed_movement_publisher.publish(msg)
             
+            odoms = np.array(self.z_odom)
+            self.get_logger().warn(f"{np.median(odoms[:, 1])}")
+
             for z_v, z_w in self.z_odom:
                 self._execute_motion_step(z_v, z_w)
                 self._steps += 1
