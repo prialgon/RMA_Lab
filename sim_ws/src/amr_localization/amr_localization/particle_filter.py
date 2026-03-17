@@ -93,10 +93,14 @@ class ParticleFilter:
         
         particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
         coords = self._particles[:, :2]
-        clusters = DBSCAN(eps=0.3).fit(coords)
+        clusters = DBSCAN(eps=0.2).fit(coords)
+
+        labels = set(clusters.labels_)
+        if -1 in labels:
+            labels.remove(-1)
         
         
-        if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
+        if len(labels) == 1:
             
             pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
