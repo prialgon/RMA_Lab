@@ -111,14 +111,14 @@ class ParticleFilter:
             localized = True
             self._particle_count = 50
         else:
-            if len(set(clusters.labels_)) < self._n_prev_clusters:
+            if len(labels) < self._n_prev_clusters:
                 self._particle_count = max(50, int(self._particle_count * 0.8))
             
             max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
             pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
-            self._n_prev_clusters = len(set(clusters.labels_))
+            self._n_prev_clusters = len(labels)
             
         return localized, pose
 
