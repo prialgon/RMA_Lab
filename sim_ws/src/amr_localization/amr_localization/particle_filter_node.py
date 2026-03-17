@@ -12,6 +12,7 @@ import os
 import time
 import traceback
 from transforms3d.euler import euler2quat
+import numpy as np
 
 from amr_localization.particle_filter import ParticleFilter
 
@@ -86,7 +87,7 @@ class ParticleFilterNode(LifecycleNode):
                 initial_pose=initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
             
             self.z_scan: list[float] = []
@@ -111,31 +112,40 @@ class ParticleFilterNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
 
-            # self._subscribers: list[message_filters.Subscriber] = []
-            # self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
-            # self._subscribers.append(
-            #     message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
-            # )
+            if self._simulation:
+                self._subscribers: list[message_filters.Subscriber] = []
+                self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
+                self._subscribers.append(
+                    message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
+                )
 
-            # ts = message_filters.ApproximateTimeSynchronizer(
-            #     self._subscribers, queue_size=10, slop=9
-            # )
-            # ts.registerCallback(self._compute_pose_callback)
+                ts = message_filters.ApproximateTimeSynchronizer(
+                    self._subscribers, queue_size=10, slop=9
+                )
+                ts.registerCallback(self._compute_pose_callback)
+
+            if not self._simulation:
             
-            self.laser_scan_subscriber = self.create_subscription(
-                LaserScan,
-                "scan",
-                qos_profile=scan_qos_profile,
-                callback=self._compute_scan_callback,
-            )
-            
-            self.odometry_subscriber = self.create_subscription(
-                Odometry,
-                "odometry",
-                qos_profile=10,
-                callback=self._compute_odometry_callback,
-            )
-            
+                self.laser_scan_subscriber = self.create_subscription(
+                    LaserScan,
+                    "scan",
+                    qos_profile=scan_qos_profile,
+                    callback=self._compute_scan_callback,
+                )
+                
+                self.odometry_subscriber = self.create_subscription(
+                    Odometry,
+                    "odometry",
+                    qos_profile=10,
+                    callback=self._compute_odometry_callback,
+                )
+                self.create_timer(
+                    timer_period_sec=5,
+                    callback=self._timer_callback,
+                )
+
+                self._finished_flag = True
+                
             # 3.11
             self.allowed_movement_publisher = self.create_publisher(
                 AllowMove, 
@@ -143,12 +153,7 @@ class ParticleFilterNode(LifecycleNode):
                 qos_profile=10,
             )
             
-            self.create_timer(
-                timer_period_sec=5,
-                callback=self._timer_callback,
-            )
-
-            self._finished_flag = True
+            
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -179,6 +184,7 @@ class ParticleFilterNode(LifecycleNode):
         self.z_odom.append((z_v, z_w))
         
     def _timer_callback(self):
+        
         if self._finished_flag and len(self.z_odom)>0:
             self._finished_flag = False
             msg: AllowMove = AllowMove()
@@ -186,6 +192,9 @@ class ParticleFilterNode(LifecycleNode):
             msg.allowed = False
             self.allowed_movement_publisher.publish(msg)
             
+            odoms = np.array(self.z_odom)
+            self.get_logger().warn(f"{np.median(odoms[:, 1])}")
+
             for z_v, z_w in self.z_odom:
                 self._execute_motion_step(z_v, z_w)
                 self._steps += 1
@@ -210,6 +219,11 @@ class ParticleFilterNode(LifecycleNode):
             scan_msg: Message containing LiDAR sensor readings.
 
         """
+        msg: AllowMove = AllowMove()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.allowed = True
+        self.allowed_movement_publisher.publish(msg)
+
         # Parse measurements
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z

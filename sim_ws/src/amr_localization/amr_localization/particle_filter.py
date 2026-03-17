@@ -74,6 +74,8 @@ class ParticleFilter:
             "%Y-%m-%d_%H-%M-%S"
         )
 
+        self._n_prev_clusters = particle_count
+
     def compute_pose(self) -> tuple[bool, tuple[float, float, float]]:
         """Computes the pose estimate when the particles form a single DBSCAN cluster.
 
@@ -90,23 +92,33 @@ class ParticleFilter:
         pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
         
         particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
+        coords = self._particles[:, :2]
+        clusters = DBSCAN(eps=0.2).fit(coords)
+
+        labels = set(clusters.labels_)
+        if -1 in labels:
+            labels.remove(-1)
         
-        clusters = DBSCAN().fit(particles_with_approx)
         
-        
-        if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
+        if len(labels) == 1:
             
             pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
             
-            self._particles = self._particles[:50]
+            if len(self._particles) > 50:
+                self._particles = self._init_particles(50, False, pose, (0.05, 0.05, math.radians(5)))
             localized = True
+            self._particle_count = 50
         else:
+            if len(labels) < self._n_prev_clusters:
+                self._particle_count = max(50, int(self._particle_count * 0.8))
+            
             max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
             pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
+            self._n_prev_clusters = len(labels)
             
         return localized, pose
 
@@ -121,15 +133,19 @@ class ParticleFilter:
         self._iteration += 1
 
         old_positions = self._particles[:, [0, 1]].copy()
+        
+        num_particles = self._particles.shape[0]
+        # self._logger.warn(f"ERR: {w}")
+        noise_v = np.random.normal(loc=0, scale=self._sigma_v, size=num_particles)
+        noise_w = np.random.normal(loc=0, scale=self._sigma_w, size=num_particles)
 
-        # TODO: 3.5. Complete the function body with your code.
-        delta_position: float = (v + np.random.normal(loc=0, scale=self._sigma_v)) * self._dt
-        delta_rotation: float = (w + np.random.normal(loc=0, scale=self._sigma_w)) * self._dt
+        delta_position = (v + noise_v) * self._dt
+        delta_rotation = (w + noise_w) * self._dt
 
         orientations = self._particles[:, 2]
 
-        delta_x = np.cos(orientations + delta_rotation) * delta_position
-        delta_y = np.sin(orientations + delta_rotation) * delta_position
+        delta_x = np.cos(orientations + delta_rotation / 2.0) * delta_position
+        delta_y = np.sin(orientations + delta_rotation / 2.0) * delta_position
 
         self._particles[:, 0] += delta_x
         self._particles[:, 1] += delta_y
@@ -162,7 +178,7 @@ class ParticleFilter:
         bins = np.cumsum(weights)
         
         W: float = np.sum(weights)
-        
+        self._logger.warn(f"W: {W}; Count: {self._particle_count}")
         u_0: float = np.random.uniform(low=0, high=W/self._particle_count)
         
         u = u_0 + np.arange(self._particle_count) * W/self._particle_count
@@ -401,6 +417,12 @@ class ParticleFilter:
         measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
 
         z_hat: list[float] = self._sense(particle)
+        z_hat = np.nan_to_num(
+            z_hat, 
+            nan=self._sensor_range_max,
+            posinf=self._sensor_range_max, 
+            neginf=self._sensor_range_min
+        )
 
         step = len(measurements) // n
         downsampled_measurements = [measurements[i] for i in range(0, n * step, step)]

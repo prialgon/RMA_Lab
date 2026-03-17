@@ -18,7 +18,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[{"simulation": simulation, "dt": 0.1}],
     )
-    
+
     if not simulation:
         odometry_node = LifecycleNode(
             package="amr_turtlebot3",
@@ -51,7 +51,7 @@ def generate_launch_description():
 
             ]
         )
-    
+
     if simulation:
         coppeliasim_node = LifecycleNode(
             package="amr_simulation",
@@ -73,7 +73,7 @@ def generate_launch_description():
                     "node_startup_order": (
                         "wall_follower",
                         "coppeliasim",  # Must be started last
-                        
+
                     )
                 }
             ],
@@ -84,6 +84,6 @@ def generate_launch_description():
                 wall_follower_node,
                 coppeliasim_node,
                 lifecycle_manager_node,  # Must be launched last
-                
+
             ]
         )
