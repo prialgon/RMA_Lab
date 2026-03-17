@@ -88,13 +88,8 @@ class WallFollowerNode(LifecycleNode):
                 )
             )
             
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers,
-                queue_size=10,
-                slop=0.15
-            )
+
             
-            ts.registerCallback(self._read_commands_callback)
             
             self._timer = self.create_timer(
                 timer_period_sec=dt,
@@ -110,6 +105,23 @@ class WallFollowerNode(LifecycleNode):
                 callback=self._compute_allow_move_callback
             )
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+            
+            if enable_localization:
+                self._subscribers.append(message_filters.Subscriber(
+                    self,
+                    PoseStamped,
+                    "pose",
+                    qos_profile=10,
+                ))
+            
+            ts = message_filters.ApproximateTimeSynchronizer(
+                self._subscribers,
+                queue_size=10,
+                slop=0.15 if not self._simulation else 9,
+            )
+            
+            ts.registerCallback(self._read_commands_callback)
+            
             
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -173,9 +185,7 @@ class WallFollowerNode(LifecycleNode):
         if not self.allowed_move:
             v = 0.0
             w = 0.0
-        # Publish
-
-        
+        # Publish        
         self._publish_velocity_commands(v, w)
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:
