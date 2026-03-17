@@ -197,7 +197,7 @@ class WallFollowerNode(LifecycleNode):
         else: 
             msg: Twist = Twist()
             msg.linear.x = v
-            msg.angular.z = w
+            msg.angular.z = -w
             
         self._publisher_cmd_vel.publish(msg)
     
