@@ -24,10 +24,8 @@ class ParticleFilter:
         sensor_range_max: float = 8.0,
         sensor_range_min: float = 0.16,
         global_localization: bool = True,
-        initial_pose: tuple[float, float, float] = (
-            float("nan"), float("nan"), float("nan")),
-        initial_pose_sigma: tuple[float, float, float] = (
-            float("nan"), float("nan"), float("nan")),
+        initial_pose: tuple[float, float, float] = (float("nan"), float("nan"), float("nan")),
+        initial_pose_sigma: tuple[float, float, float] = (float("nan"), float("nan"), float("nan")),
         logger=None,
         simulation: bool = False,
     ):
@@ -91,38 +89,33 @@ class ParticleFilter:
         """
         # TODO: 3.10. Complete the missing function body with your code.
         localized: bool = False
-        pose: tuple[float, float, float] = (
-            float("inf"), float("inf"), float("inf"))
-
-        particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(
-            self._particles[:, 2]), np.cos(self._particles[:, 2])))
+        pose: tuple[float, float, float] = (float("inf"), float("inf"), float("inf"))
+        
+        particles_with_approx = np.column_stack((self._particles[:, :2], np.sin(self._particles[:, 2]), np.cos(self._particles[:, 2])))
         coords = self._particles[:, :2]
-        clusters = DBSCAN(eps=0.2).fit(coords)
-
+        clusters = DBSCAN(eps=0.3).fit(coords)
+        
+        
         if len(set(clusters.labels_)) == 1 and not (all(clusters.labels_) == -1):
-
-            pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[
-                0]].mean(axis=0)
+            
+            pose_calculation = particles_with_approx[clusters.labels_ == clusters.labels_[0]].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
-
+            
             if len(self._particles) > 50:
-                self._particles = self._init_particles(
-                    50, False, pose, (0.05, 0.05, math.radians(5)))
+                self._particles = self._init_particles(50, False, pose, (0.05, 0.05, math.radians(5)))
             localized = True
             self._particle_count = 50
         else:
             if len(set(clusters.labels_)) < self._n_prev_clusters:
                 self._particle_count = max(50, int(self._particle_count * 0.8))
-
-            max_count_cluster = np.argmax(np.bincount(
-                clusters.labels_[clusters.labels_ != -1]))
-            pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(
-                axis=0)
+            
+            max_count_cluster = np.argmax(np.bincount(clusters.labels_[clusters.labels_ != -1]))
+            pose_calculation = particles_with_approx[clusters.labels_ == max_count_cluster].mean(axis=0)
             theta_mean = np.arctan2(pose_calculation[2], pose_calculation[3])
             pose = (pose_calculation[0], pose_calculation[1], theta_mean)
             self._n_prev_clusters = len(set(clusters.labels_))
-
+            
         return localized, pose
 
     def move(self, v: float, w: float) -> None:
@@ -136,13 +129,11 @@ class ParticleFilter:
         self._iteration += 1
 
         old_positions = self._particles[:, [0, 1]].copy()
-
+        
         num_particles = self._particles.shape[0]
-
-        noise_v = np.random.normal(
-            loc=0, scale=self._sigma_v, size=num_particles)
-        noise_w = np.random.normal(
-            loc=0, scale=self._sigma_w, size=num_particles)
+        # self._logger.warn(f"ERR: {w}")
+        noise_v = np.random.normal(loc=0, scale=self._sigma_v, size=num_particles)
+        noise_w = np.random.normal(loc=-0.4, scale=self._sigma_w, size=num_particles)
 
         delta_position = (v + noise_v) * self._dt
         delta_rotation = (w + noise_w) * self._dt
@@ -160,8 +151,7 @@ class ParticleFilter:
 
         for idx, particle in enumerate(self._particles):
             segment = [old_positions[idx], particle[[0, 1]]]
-            intersection, _ = self._map.check_collision(
-                segment, compute_distance=False)
+            intersection, _ = self._map.check_collision(segment, compute_distance=False)
 
             if intersection:
                 self._particles[idx, [0, 1]] = intersection
@@ -174,24 +164,25 @@ class ParticleFilter:
 
         """
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
-
+        
         weights: list[float] = []
-
+        
         for particle in self._particles:
             w: float = self._measurement_probability(measurements, particle)
             weights.append(w)
-
+            
         bins = np.cumsum(weights)
-
+        
         W: float = np.sum(weights)
-
+        self._logger.warn(f"W: {W}; Count: {self._particle_count}")
         u_0: float = np.random.uniform(low=0, high=W/self._particle_count)
-
+        
         u = u_0 + np.arange(self._particle_count) * W/self._particle_count
-
+            
         idx = np.digitize(u, bins)
-
+        
         self._particles = self._particles[idx]
+            
 
     def plot(self, axes, orientation: bool = True):
         """Draws particles.
@@ -217,8 +208,7 @@ class ParticleFilter:
                 scale_units="inches",
             )
         else:
-            axes.plot(self._particles[:, 0],
-                      self._particles[:, 1], "bo", markersize=1)
+            axes.plot(self._particles[:, 0], self._particles[:, 1], "bo", markersize=1)
 
         return axes
 
@@ -259,15 +249,13 @@ class ParticleFilter:
 
         if save_figure:
             save_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__),
-                             "..", save_dir, self._timestamp)
+                os.path.join(os.path.dirname(__file__), "..", save_dir, self._timestamp)
             )
 
             if not os.path.isdir(save_path):
                 os.makedirs(save_path)
 
-            file_name = str(self._iteration).zfill(
-                4) + " " + title.lower() + ".png"
+            file_name = str(self._iteration).zfill(4) + " " + title.lower() + ".png"
             file_path = os.path.join(save_path, file_name)
             figure.savefig(file_path)
 
@@ -309,10 +297,8 @@ class ParticleFilter:
                 y_cand = np.random.uniform(y_min, y_max, size=batch_size)
             else:
                 # random (normal) noise
-                x_cand = np.random.normal(
-                    initial_pose[0], initial_pose_sigma[0], size=batch_size)
-                y_cand = np.random.normal(
-                    initial_pose[1], initial_pose_sigma[1], size=batch_size)
+                x_cand = np.random.normal(initial_pose[0], initial_pose_sigma[0], size=batch_size)
+                y_cand = np.random.normal(initial_pose[1], initial_pose_sigma[1], size=batch_size)
 
             # verify the particles are valid
             for x, y in zip(x_cand, y_cand):
@@ -346,12 +332,10 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
         n: int = 16
-        rays = self._lidar_rays(pose, np.arange(
-            n).tolist(), degree_increment=360 / n)
+        rays = self._lidar_rays(pose, np.arange(n).tolist(), degree_increment=360 / n)
 
         for ray in rays:
-            z_hat.append(self._map.check_collision(
-                ray, compute_distance=True)[1])
+            z_hat.append(self._map.check_collision(ray, compute_distance=True)[1])
 
         return z_hat
 
@@ -397,10 +381,8 @@ class ParticleFilter:
 
         for index in indices:
             ray_angle = math.radians(degree_increment * index)
-            x_end = x_start + self._sensor_range_max * \
-                math.cos(theta + ray_angle)
-            y_end = y_start + self._sensor_range_max * \
-                math.sin(theta + ray_angle)
+            x_end = x_start + self._sensor_range_max * math.cos(theta + ray_angle)
+            y_end = y_start + self._sensor_range_max * math.sin(theta + ray_angle)
             rays.append([(x_start, y_start), (x_end, y_end)])
 
         return rays
@@ -428,14 +410,18 @@ class ParticleFilter:
 
         n: int = 16
 
-        measurements = np.nan_to_num(measurements, nan=self._sensor_range_min,
-                                     posinf=self._sensor_range_max, neginf=self._sensor_range_min)
+        measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
 
         z_hat: list[float] = self._sense(particle)
+        z_hat = np.nan_to_num(
+            z_hat, 
+            nan=self._sensor_range_max,
+            posinf=self._sensor_range_max, 
+            neginf=self._sensor_range_min
+        )
 
         step = len(measurements) // n
-        downsampled_measurements = [measurements[i]
-                                    for i in range(0, n * step, step)]
+        downsampled_measurements = [measurements[i] for i in range(0, n * step, step)]
 
         for z_sensed, z_real in zip(z_hat, downsampled_measurements):
             probability *= self._gaussian(z_sensed, self._sigma_z, z_real)

@@ -8,7 +8,7 @@ def generate_launch_description():
     simulation = True
     world = "lab03"
     start = (0.0, -0.8, math.radians(90))
-    particles = 400
+    particles = 500
     sigma_v = 0.05
     sigma_w = 0.1
     sigma_z = 0.2
