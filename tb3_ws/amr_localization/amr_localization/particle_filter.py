@@ -171,8 +171,9 @@ class ParticleFilter:
         
         weights: list[float] = []
         
-        for particle in self._particles:
+        for idx, particle in enumerate(self._particles):
             w: float = self._measurement_probability(measurements, particle)
+            self._logger.warn(f"Weight {idx}: {w}")
             weights.append(w)
             
         bins = np.cumsum(weights)
