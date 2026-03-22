@@ -1,8 +1,8 @@
 import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
 
-from amr_msgs.msg import PoseStamped
-from geometry_msgs.msg import TwistStamped
+from amr_msgs.msg import PoseStamped, AllowMove
+from geometry_msgs.msg import TwistStamped, Twist
 from nav_msgs.msg import Path
 
 import math
@@ -29,15 +29,18 @@ class PurePursuitNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             lookahead_distance = (
-                self.get_parameter("lookahead_distance").get_parameter_value().double_value
+                self.get_parameter(
+                    "lookahead_distance").get_parameter_value().double_value
             )
-            self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
+            self._simulation = self.get_parameter(
+                "simulation").get_parameter_value().bool_value
 
             # Attribute and object initializations
             self._pure_pursuit = PurePursuit(
@@ -46,17 +49,29 @@ class PurePursuitNode(LifecycleNode):
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )
-            
+
             self._path = []
 
+            self.allowed_move: bool = True
+
             # Publishers
-            self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
+            if not self._simulation:
+                self._publisher = self.create_publisher(
+                    Twist, "cmd_vel", 10)
+            else:
+                self._publisher = self.create_publisher(
+                    TwistStamped, "cmd_vel", 10)
 
             # Subscribers
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
-            self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
+            self._subscriber_path = self.create_subscription(
+                Path, "path", self._path_callback, 10)
+
+            self._subscriber_allow_move = self.create_subscription(
+                AllowMove, "allow_move", self._allow_move_callback, 10
+            )
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -71,7 +86,8 @@ class PurePursuitNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
 
@@ -84,7 +100,7 @@ class PurePursuitNode(LifecycleNode):
             pose_msg: Message containing the estimated robot pose.
 
         """
-        if pose_msg.localized:
+        if pose_msg.localized and self.allowed_move:
             # Parse pose
             x = pose_msg.pose.position.x
             y = pose_msg.pose.position.y
@@ -97,7 +113,8 @@ class PurePursuitNode(LifecycleNode):
 
             # Execute pure pursuit
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            self.get_logger().info(
+                f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
             # Publish
             self._publish_velocity_commands(v, w)
@@ -110,8 +127,8 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        self._pure_pursuit.path = path_msg.poses
-        
+        self._pure_pursuit.path = [(node.pose.position.x, node.pose.position.y) for node in path_msg.poses]
+
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
 
@@ -120,11 +137,27 @@ class PurePursuitNode(LifecycleNode):
             w: Angular velocity command [rad/s].
 
         """
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.twist.linear.x = v
-        msg.twist.angular.z = w
-        self._publisher.publish(msg)
+        if not self._simulation:
+            msg = Twist()
+            msg.linear.x = v
+            msg.angular.z = -w
+            self._publisher.publish(msg)
+        else:
+            msg = TwistStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.twist.linear.x = v
+            msg.twist.angular.z = w
+            self._publisher.publish(msg)
+
+
+    def _allow_move_callback(self, msg: AllowMove) -> None:
+        self.allowed_move = msg.allowed
+
+        if not self.allowed_move:
+            msg_twist = Twist()
+            msg_twist.linear.x = 0.0
+            msg_twist.angular.z = 0.0
+            self._publisher.publish(msg_twist)
 
 
 def main(args=None):

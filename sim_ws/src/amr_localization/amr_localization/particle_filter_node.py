@@ -27,7 +27,8 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("enable_plot", False)
         self.declare_parameter("global_localization", True)
         self.declare_parameter("initial_pose", (0.0, 0.0, math.radians(0)))
-        self.declare_parameter("initial_pose_sigma", (0.05, 0.05, math.radians(5)))
+        self.declare_parameter("initial_pose_sigma",
+                               (0.05, 0.05, math.radians(5)))
         self.declare_parameter("particles", 100)
         self.declare_parameter("sigma_v", 0.1)
         self.declare_parameter("sigma_w", 0.1)
@@ -43,38 +44,51 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
             # Parameters
-            dt = self.get_parameter("dt").get_parameter_value().double_value
-            self._enable_plot = self.get_parameter("enable_plot").get_parameter_value().bool_value
+            dt = self.get_parameter(
+                "dt").get_parameter_value().double_value
+            self._enable_plot = self.get_parameter(
+                "enable_plot").get_parameter_value().bool_value
             global_localization = (
-                self.get_parameter("global_localization").get_parameter_value().bool_value
+                self.get_parameter(
+                    "global_localization").get_parameter_value().bool_value
             )
-            initial_pose = tuple(
-                self.get_parameter("initial_pose").get_parameter_value().double_array_value.tolist()
+            self.initial_pose = tuple(
+                self.get_parameter("initial_pose").get_parameter_value(
+                ).double_array_value.tolist()
             )
             initial_pose_sigma = tuple(
                 self.get_parameter("initial_pose_sigma")
                 .get_parameter_value()
                 .double_array_value.tolist()
             )
-            particles = self.get_parameter("particles").get_parameter_value().integer_value
-            sigma_v = self.get_parameter("sigma_v").get_parameter_value().double_value
-            sigma_w = self.get_parameter("sigma_w").get_parameter_value().double_value
-            sigma_z = self.get_parameter("sigma_z").get_parameter_value().double_value
+            particles = self.get_parameter(
+                "particles").get_parameter_value().integer_value
+            sigma_v = self.get_parameter(
+                "sigma_v").get_parameter_value().double_value
+            sigma_w = self.get_parameter(
+                "sigma_w").get_parameter_value().double_value
+            sigma_z = self.get_parameter(
+                "sigma_z").get_parameter_value().double_value
             self._steps_btw_sense_updates = (
-                self.get_parameter("steps_btw_sense_updates").get_parameter_value().integer_value
+                self.get_parameter(
+                    "steps_btw_sense_updates").get_parameter_value().integer_value
             )
-            self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
-            world = self.get_parameter("world").get_parameter_value().string_value
+            self._simulation = self.get_parameter(
+                "simulation").get_parameter_value().bool_value
+            world = self.get_parameter(
+                "world").get_parameter_value().string_value
 
             # Attribute and object initializations
-            self._localized = False
+            self._localized = True
             self._steps = 0
             map_path = os.path.realpath(
-                os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
+                os.path.join(os.path.dirname(__file__),
+                             "..", "maps", world + ".json")
             )
             self._particle_filter = ParticleFilter(
                 dt,
@@ -84,14 +98,19 @@ class ParticleFilterNode(LifecycleNode):
                 sigma_w=sigma_w,
                 sigma_z=sigma_z,
                 global_localization=global_localization,
-                initial_pose=initial_pose,
+                initial_pose=self.initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),
             )
-            
+
             self.z_scan: list[float] = []
             self.z_odom: list[tuple[float, float]] = []
+
+            self.last_pose: tuple[float, ...] = self.initial_pose
+
+            self.last_odometry_callback = None
 
             if self._enable_plot:
                 self._particle_filter.show("Initialization", save_figure=True)
@@ -103,7 +122,7 @@ class ParticleFilterNode(LifecycleNode):
                 "pose",
                 10
             )
-            
+
             # Subscribers
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
@@ -114,9 +133,11 @@ class ParticleFilterNode(LifecycleNode):
 
             if self._simulation:
                 self._subscribers: list[message_filters.Subscriber] = []
-                self._subscribers.append(message_filters.Subscriber(self, Odometry, "odometry"))
                 self._subscribers.append(
-                    message_filters.Subscriber(self, LaserScan, "scan", qos_profile=scan_qos_profile)
+                    message_filters.Subscriber(self, Odometry, "odometry"))
+                self._subscribers.append(
+                    message_filters.Subscriber(
+                        self, LaserScan, "scan", qos_profile=scan_qos_profile)
                 )
 
                 ts = message_filters.ApproximateTimeSynchronizer(
@@ -125,14 +146,14 @@ class ParticleFilterNode(LifecycleNode):
                 ts.registerCallback(self._compute_pose_callback)
 
             if not self._simulation:
-            
+
                 self.laser_scan_subscriber = self.create_subscription(
                     LaserScan,
                     "scan",
                     qos_profile=scan_qos_profile,
                     callback=self._compute_scan_callback,
                 )
-                
+
                 self.odometry_subscriber = self.create_subscription(
                     Odometry,
                     "odometry",
@@ -145,15 +166,13 @@ class ParticleFilterNode(LifecycleNode):
                 )
 
                 self._finished_flag = True
-                
+
             # 3.11
             self.allowed_movement_publisher = self.create_publisher(
-                AllowMove, 
-                topic="allow_move", 
+                AllowMove,
+                topic="allow_move",
                 qos_profile=10,
             )
-            
-            
 
         except Exception:
             self.get_logger().error(f"{traceback.format_exc()}")
@@ -168,49 +187,79 @@ class ParticleFilterNode(LifecycleNode):
             state: Current lifecycle state.
 
         """
-        self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
+        self.get_logger().info(
+            f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
-    
+
     def _compute_scan_callback(self, scan_msg: LaserScan) -> None:
         self.z_scan = list(scan_msg.ranges)
-    
+
     def _compute_odometry_callback(self, odom_msg: Odometry) -> None:
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
-        
-        if abs(z_v) < 0.1 and abs(z_w) < 0.1:
-            return None
-        self.z_odom.append((z_v, z_w))
-        
+
+        if abs(z_v) >= 0.1 and abs(z_w) >= 0.1:
+            self.z_odom.append((z_v, z_w))
+
+        # ===== PUNTO MEDIO =====
+        if self.last_odometry_callback is not None:
+            delta_time: float = time.perf_counter() - self.last_odometry_callback
+            x_last, y_last, th_last = self.last_pose
+            x_h: float = x_last + z_v * \
+                math.cos(th_last + z_w * delta_time / 2) * delta_time
+            y_h: float = y_last + z_v * \
+                math.sin(th_last + z_w * delta_time / 2) * delta_time
+            th_h: float = th_last + z_w * delta_time
+
+            self.last_pose = (x_h, y_h, th_h)
+
+            msg = PoseStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.localized = True
+            msg.pose.position.x = x_h
+            msg.pose.position.y = y_h
+
+            quaternions = euler2quat(0, 0, th_h)
+            msg.pose.orientation.w = quaternions[0]
+            msg.pose.orientation.x = quaternions[1]
+            msg.pose.orientation.y = quaternions[2]
+            msg.pose.orientation.z = quaternions[3]
+            
+            self.pose_publisher.publish(msg)
+
+        self.last_odometry_callback = time.perf_counter()
+
     def _timer_callback(self):
-        
-        if self._finished_flag and len(self.z_odom)>0:
+
+        if self._finished_flag and len(self.z_odom) > 0:
             self._finished_flag = False
             msg: AllowMove = AllowMove()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.allowed = False
             self.allowed_movement_publisher.publish(msg)
-            
+
             odoms = np.array(self.z_odom)
-            self.get_logger().warn(f"{np.median(odoms[:, 1])}")
+            # self.get_logger().warn(f"{np.median(odoms[:, 1])}")
 
             for z_v, z_w in self.z_odom:
                 self._execute_motion_step(z_v, z_w)
                 self._steps += 1
 
-            
             x_h, y_h, theta_h = self._execute_measurement_step(self.z_scan)
+
+            self.last_odometry_callback = time.perf_counter()
+            self.last_pose = (x_h, y_h, theta_h)
+
             msg: AllowMove = AllowMove()
             msg.header.stamp = self.get_clock().now().to_msg()
             msg.allowed = True
             self.allowed_movement_publisher.publish(msg)
-            
+
             self._publish_pose_estimate(x_h, y_h, theta_h)
             self._finished_flag = True
             self.z_odom.clear()
-            
-        
+
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
 
@@ -263,7 +312,8 @@ class ParticleFilterNode(LifecycleNode):
             self._localized, pose = self._particle_filter.compute_pose()
             clustering_time = time.perf_counter() - start_time
 
-            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
+            self.get_logger().info(
+                f"Clustering time: {clustering_time:6.3f} s")
 
         return pose
 
@@ -292,14 +342,14 @@ class ParticleFilterNode(LifecycleNode):
             theta_h: Heading estimate [rad].
 
         """
-        # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).       
+        # TODO: 3.2. Complete the function body with your code (i.e., replace the pass statement).
         msg: PoseStamped = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.localized = self._localized
         
         if self._localized:
             quaternions = euler2quat(0, 0, theta_h)
-            
+
             msg.pose.position.x = x_h
             msg.pose.position.y = y_h
 
@@ -307,9 +357,9 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.x = quaternions[1]
             msg.pose.orientation.y = quaternions[2]
             msg.pose.orientation.z = quaternions[3]
-        
-        self.pose_publisher.publish(msg)    
-        
+
+        self.pose_publisher.publish(msg)
+
 
 def main(args=None):
     rclpy.init(args=args)

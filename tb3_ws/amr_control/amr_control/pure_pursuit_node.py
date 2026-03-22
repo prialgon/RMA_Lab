@@ -55,8 +55,12 @@ class PurePursuitNode(LifecycleNode):
             self.allowed_move: bool = True
 
             # Publishers
-            self._publisher = self.create_publisher(
-                Twist, "cmd_vel", 10)
+            if not self._simulation:
+                self._publisher = self.create_publisher(
+                    Twist, "cmd_vel", 10)
+            else:
+                self._publisher = self.create_publisher(
+                    TwistStamped, "cmd_vel", 10)
 
             # Subscribers
             self._subscriber_pose = self.create_subscription(
@@ -123,7 +127,8 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        self._pure_pursuit.path = path_msg.poses
+        self._pure_pursuit.path = [
+            (node.pose.position.x, node.pose.position.y) for node in path_msg.poses]
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
@@ -133,10 +138,17 @@ class PurePursuitNode(LifecycleNode):
             w: Angular velocity command [rad/s].
 
         """
-        msg = Twist()
-        msg.linear.x = v
-        msg.angular.z = w
-        self._publisher.publish(msg)
+        if not self._simulation:
+            msg = Twist()
+            msg.linear.x = v
+            msg.angular.z = -w
+            self._publisher.publish(msg)
+        else:
+            msg = TwistStamped()
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.twist.linear.x = v
+            msg.twist.angular.z = w
+            self._publisher.publish(msg)
 
     def _allow_move_callback(self, msg: AllowMove) -> None:
         self.allowed_move = msg.allowed

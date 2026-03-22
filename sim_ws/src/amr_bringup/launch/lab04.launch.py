@@ -53,13 +53,13 @@ def generate_launch_description():
                 "enable_plot": True,
                 "goal": goal,
                 "grid_size": 0.1,
-                "node_count": 250,
+                "node_count": 500,
                 "obstacle_safety_distance": 0.12,  # 0.08,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
                 "smoothing_smooth_weight": 0.25,
-                "use_grid": True,
+                "use_grid": False,
                 "world": world,
             }
         ],
@@ -74,7 +74,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.3,
+                "lookahead_distance": 0.2,
                 "simulation": simulation,
             }
         ],

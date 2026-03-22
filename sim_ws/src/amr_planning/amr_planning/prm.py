@@ -52,6 +52,8 @@ class PRM:
             compiled_intersect=False,
             use_regions=False,
         )
+        
+       
 
         self._graph: dict[tuple[float, float], list[tuple[float, float]]] = self._create_graph(
             use_grid,
@@ -61,6 +63,7 @@ class PRM:
         )
 
         self._logger = logger
+        
         self._simulation: bool = simulation
 
         self._figure, self._axes = plt.subplots(1, 1, figsize=(7, 7))
@@ -82,6 +85,7 @@ class PRM:
 
         """
         # Check if the goal is valid
+        
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
 
@@ -281,7 +285,7 @@ class PRM:
 
         if display:
             plt.show(block=block)
-
+        
         if save_figure:
             save_path = os.path.join(os.path.dirname(__file__), "..", save_dir)
 
@@ -424,7 +428,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=750, grid_size=0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=False, node_count=750, grid_size=0.1, connection_distance=0.15)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
