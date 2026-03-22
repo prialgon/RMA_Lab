@@ -2,7 +2,7 @@ import rclpy
 from rclpy.lifecycle import LifecycleNode, LifecycleState, TransitionCallbackReturn
 
 from amr_msgs.msg import PoseStamped, AllowMove
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, Twist
 from nav_msgs.msg import Path
 
 import math
@@ -56,7 +56,7 @@ class PurePursuitNode(LifecycleNode):
 
             # Publishers
             self._publisher = self.create_publisher(
-                TwistStamped, "cmd_vel", 10)
+                Twist, "cmd_vel", 10)
 
             # Subscribers
             self._subscriber_pose = self.create_subscription(
@@ -133,20 +133,18 @@ class PurePursuitNode(LifecycleNode):
             w: Angular velocity command [rad/s].
 
         """
-        msg = TwistStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.twist.linear.x = v
-        msg.twist.angular.z = w
+        msg = Twist()
+        msg.linear.x = v
+        msg.angular.z = w
         self._publisher.publish(msg)
 
     def _allow_move_callback(self, msg: AllowMove) -> None:
         self.allowed_move = msg.allowed
 
         if not self.allowed_move:
-            msg_twist = TwistStamped()
-            msg_twist.header.stamp = self.get_clock().now().to_msg()
-            msg_twist.twist.linear.x = 0.0
-            msg_twist.twist.angular.z = 0.0
+            msg_twist = Twist()
+            msg_twist.linear.x = 0.0
+            msg_twist.angular.z = 0.0
             self._publisher.publish(msg_twist)
 
 

@@ -87,7 +87,7 @@ class PurePursuit:
         closest_idx = 0
         min_distance: float = math.inf
         for idx, node in enumerate(self.path):
-            distance: float = math.dist(node, (x,y)) 
+            distance: float = math.dist((node.pose.position.x, node.pose.position.y), (x,y)) 
             if distance < min_distance:
                 min_distance = distance
                 closest_idx = idx

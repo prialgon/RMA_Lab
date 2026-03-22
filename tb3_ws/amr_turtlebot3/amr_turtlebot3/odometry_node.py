@@ -16,23 +16,22 @@ class OdometryNode(LifecycleNode):
         self._last_pos_x: float = None
         self._last_pos_y: float = None
         self._last_time: float = None 
-        self._last_angle: float = None
+        self._last_angular_w: float = None
 
-        
-        
-    def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self._odometry_subscriber = self.create_subscription(
             msg_type=Odometry,
             topic="odom",
             callback=self._handle_odometry,
             qos_profile=10,
         )
-
+        
         self._odometry_publisher = self.create_publisher(
             msg_type=Odometry,
             topic="odometry",
             qos_profile=10,
         )
+        
+    def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         return super().on_configure(state)
 
     def on_activate(self,  state: LifecycleState) -> TransitionCallbackReturn:
@@ -56,36 +55,38 @@ class OdometryNode(LifecycleNode):
         _, _, th_h = quat2euler((quat_w, quat_x, quat_y, quat_z))
         th_h %= 2 * math.pi
         
-        if self._last_pos_x is None or self._last_pos_y is None or self._last_time is None or self._last_angle is None:
+        if self._last_pos_x is None or self._last_pos_y is None or self._last_time is None or self._last_angular_w is None:
             self._last_pos_x = pos_x
             self._last_pos_y = pos_y
             self._last_time = time
-            self._last_angle = th_h
+            self._last_angular_w = th_h
             return None
 
         dt: float = time - self._last_time
         
-        v_global_x = (pos_x - self._last_pos_x) / dt
-        v_global_y = (pos_y - self._last_pos_y) / dt
+        # vel_x = (pos_x - self._last_pos_x) / dt
+        # vel_y = (pos_y - self._last_pos_y) / dt
+
+        v = math.dist((pos_x, pos_y), (self._last_pos_x, self._last_pos_y)) / dt
                 
-        vel_x: float = v_global_x * math.cos(th_h) + v_global_y * math.sin(th_h)
-        vel_y: float = -v_global_x * math.sin(th_h) + v_global_y * math.cos(th_h)
+        # vel_x: float = v_global_x * math.cos(th_h) + v_global_y * math.sin(th_h)
+        # vel_y: float = -v_global_x * math.sin(th_h) + v_global_y * math.cos(th_h)
         
-        angular_vel: float = (th_h - self._last_angle)/dt
+        vel_angular: float = (th_h - self._last_angular_w)/dt
         
         odometry_msg: Odometry = Odometry()
         odometry_msg.header = msg.header
         odometry_msg.child_frame_id = msg.child_frame_id
-        odometry_msg.twist.twist.linear.x = vel_x
-        odometry_msg.twist.twist.linear.y = vel_y
-        odometry_msg.twist.twist.angular.z = angular_vel
+        odometry_msg.twist.twist.linear.x = v
+        odometry_msg.twist.twist.linear.y = 0.0
+        odometry_msg.twist.twist.angular.z = vel_angular
         
         self._odometry_publisher.publish(odometry_msg)
         
         self._last_pos_x = pos_x
         self._last_pos_y = pos_y
         self._last_time = time
-        self._last_angle = th_h
+        self._last_angular_w = th_h
         
 def main(args=None):
     rclpy.init(args=args)

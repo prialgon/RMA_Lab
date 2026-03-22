@@ -84,7 +84,7 @@ class ParticleFilterNode(LifecycleNode):
                 "world").get_parameter_value().string_value
 
             # Attribute and object initializations
-            self._localized = False
+            self._localized = True
             self._steps = 0
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__),
@@ -199,8 +199,8 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
 
-        if abs(z_v) < 0.1 and abs(z_w) < 0.1:
-            return None
+        # if abs(z_v) < 0.1 and abs(z_w) < 0.1:
+        #     return None
         self.z_odom.append((z_v, z_w))
 
         # ===== PUNTO MEDIO =====
@@ -217,6 +217,7 @@ class ParticleFilterNode(LifecycleNode):
 
             msg = PoseStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
+            msg.localized = True
             msg.pose.position.x = x_h
             msg.pose.position.y = y_h
 
@@ -225,7 +226,7 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.x = quaternions[1]
             msg.pose.orientation.y = quaternions[2]
             msg.pose.orientation.z = quaternions[3]
-
+            
             self.pose_publisher.publish(msg)
 
         self.last_odometry_callback = time.perf_counter()
@@ -346,7 +347,7 @@ class ParticleFilterNode(LifecycleNode):
         msg: PoseStamped = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.localized = self._localized
-
+        
         if self._localized:
             quaternions = euler2quat(0, 0, theta_h)
 

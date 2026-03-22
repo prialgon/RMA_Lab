@@ -49,12 +49,12 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
-                "connection_distance": 0.15,  # 0.3,
+                "connection_distance": 0.3,  # 0.3,
                 "enable_plot": True,
                 "goal": goal,
                 "grid_size": 0.1,
                 "node_count": 250,
-                "obstacle_safety_distance": 0.12,  # 0.08,
+                "obstacle_safety_distance": 0.08,  # 0.08,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
@@ -80,21 +80,30 @@ def generate_launch_description():
         ],
     )
 
-    coppeliasim_node = LifecycleNode(
-        package="amr_simulation",
-        executable="coppeliasim",
-        name="coppeliasim",
+    # coppeliasim_node = LifecycleNode(
+    #     package="amr_simulation",
+    #     executable="coppeliasim",
+    #     name="coppeliasim",
+    #     namespace="",
+    #     output="screen",
+    #     arguments=["--ros-args", "--log-level", "WARN"],
+    #     parameters=[
+    #         {
+    #             "enable_localization": True,
+    #             "goal": goal,
+    #             "pose_tolerance": (0.1, 10.0),
+    #             "start": start,
+    #         }
+    #     ],
+    # )
+    
+    odometry_node = LifecycleNode(
+        package="amr_turtlebot3",
+        executable="odometry_node",
+        name="odometry",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[
-            {
-                "enable_localization": True,
-                "goal": goal,
-                "pose_tolerance": (0.1, 10.0),
-                "start": start,
-            }
-        ],
     )
 
     lifecycle_manager_node = Node(
@@ -108,7 +117,8 @@ def generate_launch_description():
                     "particle_filter",
                     "probabilistic_roadmap",
                     "pure_pursuit",
-                    "coppeliasim",  # Must be started last
+                    "odometry"
+                    # "coppeliasim",  # Must be started last
                 )
             }
         ],
@@ -119,7 +129,8 @@ def generate_launch_description():
             particle_filter_node,
             probabilistic_roadmap_node,
             pure_pursuit_node,
-            coppeliasim_node,
+            # coppeliasim_node,
+            odometry_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )
