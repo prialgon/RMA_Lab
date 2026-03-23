@@ -378,8 +378,8 @@ class PRM:
             row_nodes: int = int((x_max - x_min) / grid_size)
             column_nodes: int = int((y_max - y_min) / grid_size)
             nodes = []
-            for i in range(row_nodes):
-                for j in range(column_nodes):
+            for i in range(row_nodes+1):
+                for j in range(column_nodes+1):
                     x_value: float = np.round(x_min+i*grid_size, 3)
                     y_value: float = np.round(y_min+j*grid_size, 3)
                     node = (x_value, y_value)

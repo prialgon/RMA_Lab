@@ -146,7 +146,7 @@ class ParticleFilter:
         noise_v = np.random.normal(
             loc=0, scale=self._sigma_v, size=num_particles)
         noise_w = np.random.normal(
-            loc=-0.4, scale=self._sigma_w, size=num_particles)
+            loc=0, scale=self._sigma_w, size=num_particles)
 
         delta_position = (v + noise_v) * self._dt
         delta_rotation = (w + noise_w) * self._dt
