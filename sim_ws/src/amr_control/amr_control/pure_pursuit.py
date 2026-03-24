@@ -55,7 +55,6 @@ class PurePursuit:
         w = 2 * v * math.sin(alpha) / l
         
         if alpha > math.pi/3:
-            self._logger.warn("Houston houston")
             v = 0.0
             w = 2.0
         
