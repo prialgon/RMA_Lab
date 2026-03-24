@@ -17,23 +17,41 @@ def generate_launch_description():
     sigma_w = 0.1
     sigma_z = 0.2
 
-    particle_filter_node = LifecycleNode(
+    # particle_filter_node = LifecycleNode(
+    #     package="amr_localization",
+    #     executable="particle_filter",
+    #     name="particle_filter",
+    #     namespace="",
+    #     output="screen",
+    #     arguments=["--ros-args", "--log-level", "WARN"],
+    #     parameters=[
+    #         {
+    #             "enable_plot": False,
+    #             "global_localization": global_localization,
+    #             "initial_pose": start,
+    #             "initial_pose_sigma": start_sigma,
+    #             "particles": particles,
+    #             "sigma_v": sigma_v,
+    #             "sigma_w": sigma_w,
+    #             "sigma_z": sigma_z,
+    #             "simulation": simulation,
+    #             "world": world,
+    #         }
+    #     ],
+    # )
+
+    ekf_node = LifecycleNode(
         package="amr_localization",
-        executable="particle_filter",
-        name="particle_filter",
+        executable="ekf",
+        name="ekf",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
                 "enable_plot": False,
-                "global_localization": global_localization,
                 "initial_pose": start,
                 "initial_pose_sigma": start_sigma,
-                "particles": particles,
-                "sigma_v": sigma_v,
-                "sigma_w": sigma_w,
-                "sigma_z": sigma_z,
                 "simulation": simulation,
                 "world": world,
             }
@@ -59,7 +77,7 @@ def generate_launch_description():
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
                 "smoothing_smooth_weight": 0.25,
-                "use_grid": False,
+                "use_grid": True,
                 "world": world,
             }
         ],
@@ -105,7 +123,8 @@ def generate_launch_description():
         parameters=[
             {
                 "node_startup_order": (
-                    "particle_filter",
+                    # "particle_filter",
+                    "ekf",
                     "probabilistic_roadmap",
                     "pure_pursuit",
                     "coppeliasim",  # Must be started last
@@ -116,7 +135,8 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            particle_filter_node,
+            # particle_filter_node,
+            ekf_node,
             probabilistic_roadmap_node,
             pure_pursuit_node,
             coppeliasim_node,
