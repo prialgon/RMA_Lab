@@ -1,74 +1,71 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(amr_localization_cpp)
 
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic -O3)
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
+if(CMAKE_VERSION VERSION_LESS 3.18)
+  set(DEV_MODULE Development)
+else()
+  set(DEV_MODULE Development.Module)
 endif()
 
 find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(rclcpp_lifecycle REQUIRED)
-find_package(amr_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(tf2 REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)
-find_package(message_filters REQUIRED)
-find_package(ament_index_cpp REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+find_package(Python REQUIRED COMPONENTS Interpreter ${DEV_MODULE} REQUIRED)
 
-include_directories(include)
+# Find nanobind installed via pip
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  OUTPUT_VARIABLE nanobind_ROOT
+)
+find_package(nanobind CONFIG REQUIRED)
 
-add_library(amr_localization_lib SHARED
-  src/map.cpp
-  src/particle_filter.cpp
+find_package(Eigen3 REQUIRED)
+
+ament_python_install_package(${PROJECT_NAME})
+
+# Build nanobind extension module
+nanobind_add_module(_pf_core NOMINSIZE
+  src/pf_core.cpp
 )
 
-target_include_directories(amr_localization_lib PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
+target_include_directories(_pf_core PRIVATE
+  ${EIGEN3_INCLUDE_DIR}
 )
 
-ament_target_dependencies(amr_localization_lib
-  rclcpp
-  ament_index_cpp
+# Put the extension inside the installed Python package
+install(
+  TARGETS _pf_core
+  LIBRARY DESTINATION local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/${PROJECT_NAME}
 )
 
-target_compile_features(amr_localization_lib PUBLIC cxx_std_17)
-
-add_executable(particle_filter src/particle_filter_node.cpp)
-
-target_link_libraries(particle_filter
-  amr_localization_lib
+# Install platform-specific C helper library next to maps.py
+install(
+  FILES
+    ${PROJECT_NAME}/libintersect.so
+    ${PROJECT_NAME}/libintersect.dylib
+    ${PROJECT_NAME}/libintersect.dll
+  DESTINATION lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages/${PROJECT_NAME}
+  OPTIONAL
 )
 
-ament_target_dependencies(particle_filter
-  rclcpp
-  rclcpp_lifecycle
-  amr_msgs
-  nav_msgs
-  sensor_msgs
-  tf2
-  tf2_geometry_msgs
-  message_filters
-  ament_index_cpp
+install(
+  DIRECTORY maps
+  DESTINATION share/${PROJECT_NAME}
 )
 
-target_compile_features(particle_filter PUBLIC cxx_std_17)
-
-install(TARGETS
-  amr_localization_lib
-  particle_filter
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib/${PROJECT_NAME}
+install(
+  DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
-install(DIRECTORY include/
-  DESTINATION include
-)
-
-install(DIRECTORY maps/
-  DESTINATION share/${PROJECT_NAME}/maps
+install(
+  PROGRAMS
+    amr_localization_cpp/particle_filter_node.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()
