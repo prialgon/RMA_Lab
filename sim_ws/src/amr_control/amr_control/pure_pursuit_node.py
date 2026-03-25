@@ -153,8 +153,15 @@ class PurePursuitNode(LifecycleNode):
     def _allow_move_callback(self, msg: AllowMove) -> None:
         self.allowed_move = msg.allowed
 
-        if not self.allowed_move:
+        if not self.allowed_move and not self._simulation:
             msg_twist = Twist()
+            msg_twist.linear.x = 0.0
+            msg_twist.angular.z = 0.0
+            self._publisher.publish(msg_twist)
+
+        if not self.allowed_move and self._simulation:
+            msg_twist = TwistStamped()
+            msg_twist.header.stamp = self.get_clock().now().to_msg()
             msg_twist.linear.x = 0.0
             msg_twist.angular.z = 0.0
             self._publisher.publish(msg_twist)
