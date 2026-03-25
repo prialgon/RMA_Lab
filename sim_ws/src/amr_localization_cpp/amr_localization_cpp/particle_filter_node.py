@@ -65,7 +65,8 @@ class ParticleFilterNode(LifecycleNode):
             self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
             world = self.get_parameter("world").get_parameter_value().string_value
 
-            self._localized = True
+            self._localized = False
+            self._localized_confirmed = False
             self._steps = 0
 
             pkg_share = get_package_share_directory("amr_localization_cpp")
@@ -250,7 +251,7 @@ class ParticleFilterNode(LifecycleNode):
         z_v = odom_msg.twist.twist.linear.x
         z_w = odom_msg.twist.twist.angular.z
 
-        if abs(z_v) >= 0.1 and abs(z_w) >= 0.1:
+        if abs(z_v) >= 0.01 or abs(z_w) >= 0.1:
             self.z_odom.append((z_v, z_w))
 
         if self.last_odometry_callback is not None:
@@ -328,19 +329,19 @@ class ParticleFilterNode(LifecycleNode):
     def _execute_measurement_step(self, z_scan):
         pose = (float("inf"), float("inf"), float("inf"))
         
-        if self._localized or self._steps % self._steps_btw_sense_updates == 0:
+        if self._steps % self._steps_btw_sense_updates == 0:
             start_time = time.perf_counter()
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
             self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
-
-            start_time = time.perf_counter()
-            self._localized, pose = self._particle_filter.compute_pose()
-            clustering_time = time.perf_counter() - start_time
-            self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
             
             # Plot after measurement/resample update
             self._show_particles(title="after resample", save_figure=True)
+
+        start_time = time.perf_counter()
+        self._localized, pose = self._particle_filter.compute_pose()
+        clustering_time = time.perf_counter() - start_time
+        self.get_logger().info(f"Clustering time: {clustering_time:6.3f} s")
 
         return pose
 

@@ -11,20 +11,20 @@ def generate_launch_description():
     goal = (-0.6, 1.0)
 
     particle_filter_node = LifecycleNode(
-        package="amr_localization",
-        executable="particle_filter",
+        package="amr_localization_cpp",
+        executable="particle_filter_node.py",
         name="particle_filter",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": False,
+                "enable_plot": True,
                 "global_localization": True,
                 "particles": 2000,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
-                "sigma_z": 0.2,
+                "sigma_z": 0.25,
                 "simulation": simulation,
                 "world": world,
             }
