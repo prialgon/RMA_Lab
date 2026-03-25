@@ -199,7 +199,11 @@ class ParticleFilterNode(LifecycleNode):
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
 
-        if abs(z_v) >= 0.1 and abs(z_w) >= 0.1:
+        if abs(z_v) <= 0.01:
+            z_v = 0.0
+        if abs(z_w) <= 0.1:
+            z_w = 0.0
+        if abs(z_v) >= 0.01 or abs(z_w) >= 0.1:
             self.z_odom.append((z_v, z_w))
 
         # ===== PUNTO MEDIO =====

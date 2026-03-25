@@ -378,8 +378,8 @@ class PRM:
             row_nodes: int = int((x_max - x_min) / grid_size)
             column_nodes: int = int((y_max - y_min) / grid_size)
             nodes = []
-            for i in range(row_nodes):
-                for j in range(column_nodes):
+            for i in range(row_nodes+1):
+                for j in range(column_nodes+1):
                     x_value: float = np.round(x_min+i*grid_size, 3)
                     y_value: float = np.round(y_min+j*grid_size, 3)
                     node = (x_value, y_value)
@@ -428,7 +428,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=False, node_count=750, grid_size=0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=True, node_count=750, grid_size=0.1, connection_distance=0.15)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
