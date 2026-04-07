@@ -19,7 +19,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": True,
+                "enable_plot": False,
                 "global_localization": True,
                 "particles": 2000,
                 "sigma_v": 0.05,

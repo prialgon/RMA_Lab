@@ -443,6 +443,17 @@ namespace amr_localization_cpp
                 std::atan2(sum_sin, sum_cos)};
         };
 
+        const int cluster_count = static_cast<int>(valid_labels.size());
+        if (cluster_count > 0)
+        {
+            const int retained_particles = 100 * cluster_count;
+            if (static_cast<int>(particles_.size()) > retained_particles)
+            {
+                particles_.resize(retained_particles);
+            }
+            particle_count_ = std::min(retained_particles, static_cast<int>(particles_.size()));
+        }
+
         if (valid_labels.size() == 1)
         {
             pose = mean_pose_of_cluster(valid_labels[0]);
@@ -461,11 +472,6 @@ namespace amr_localization_cpp
         }
         else
         {
-            if (static_cast<int>(valid_labels.size()) < n_prev_clusters_)
-            {
-                particle_count_ = std::max(50, static_cast<int>(particle_count_ * 0.8));
-            }
-
             std::unordered_map<int, int> counts;
             for (int lab : labels)
             {
