@@ -62,7 +62,7 @@ namespace amr_localization_cpp
             simulation_ = this->get_parameter("simulation").as_bool();
             const std::string world = this->get_parameter("world").as_string();
 
-            localized_ = true;
+            localized_ = false;
             steps_ = 0;
 
             const std::string pkg_share =
