@@ -31,6 +31,22 @@ def generate_launch_description():
         ],
     )
 
+    ekf_node = LifecycleNode(
+        package="amr_localization",
+        executable="ekf",
+        name="ekf",
+        namespace="",
+        output="screen",
+        arguments=["--ros-args", "--log-level", "WARN"],
+        parameters=[
+            {
+                "simulation": simulation,
+                "world": world,
+                "particle_filter_pose_topic": "particle_filter/pose",
+            }
+        ],
+    )
+
     probabilistic_roadmap_node = LifecycleNode(
         package="amr_planning",
         executable="probabilistic_roadmap",
@@ -112,6 +128,7 @@ def generate_launch_description():
             {
                 "node_startup_order": (
                     "particle_filter",
+                    "ekf",
                     "probabilistic_roadmap",
                     "wall_follower",
                     "pure_pursuit",
@@ -124,6 +141,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             particle_filter_node,
+            ekf_node,
             probabilistic_roadmap_node,
             wall_follower_node,
             pure_pursuit_node,

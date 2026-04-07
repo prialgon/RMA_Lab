@@ -278,8 +278,11 @@ class EKF:
             figure.savefig(file_path)
 
     def _init_vars(self, initial_pose, initial_pose_sigma):
-        self._pose = initial_pose
-        self._sigma = initial_pose_sigma
+        self._pose = np.array(initial_pose, dtype=float)
+        sigma = np.array(initial_pose_sigma, dtype=float)
+        if sigma.shape == (3,):
+            sigma = np.diag(np.square(sigma))
+        self._sigma = sigma
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
         """Obtains the predicted measurement of every LiDAR ray given the robot's pose.

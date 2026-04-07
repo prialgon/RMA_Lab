@@ -83,6 +83,7 @@ namespace amr_localization_cpp
         std::unique_ptr<ParticleFilter> particle_filter_;
 
         rclcpp_lifecycle::LifecyclePublisher<PoseMsg>::SharedPtr pose_publisher_;
+        rclcpp_lifecycle::LifecyclePublisher<PoseMsg>::SharedPtr particle_filter_pose_publisher_;
         rclcpp_lifecycle::LifecyclePublisher<AllowMoveMsg>::SharedPtr allowed_movement_publisher_;
 
         rclcpp::Subscription<ScanMsg>::SharedPtr laser_scan_subscriber_;

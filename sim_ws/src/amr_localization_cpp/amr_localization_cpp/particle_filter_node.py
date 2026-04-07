@@ -39,6 +39,7 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("simulation", False)
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
+        self.declare_parameter("particle_filter_pose_topic", "particle_filter/pose")
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
@@ -112,6 +113,11 @@ class ParticleFilterNode(LifecycleNode):
             self.last_odometry_callback = None
 
             self.pose_publisher = self.create_publisher(PoseStamped, "pose", 10)
+            self.particle_filter_pose_publisher = self.create_publisher(
+                PoseStamped,
+                self.get_parameter("particle_filter_pose_topic").get_parameter_value().string_value,
+                10,
+            )
 
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
@@ -245,9 +251,14 @@ class ParticleFilterNode(LifecycleNode):
     # ---------------------------------------------------------------------- #
 
     def _compute_scan_callback(self, scan_msg: LaserScan) -> None:
+        if self._localized:
+            return
         self.z_scan = list(scan_msg.ranges)
 
     def _compute_odometry_callback(self, odom_msg: Odometry) -> None:
+        if self._localized:
+            return
+
         z_v = odom_msg.twist.twist.linear.x
         z_w = odom_msg.twist.twist.angular.z
 
@@ -265,7 +276,7 @@ class ParticleFilterNode(LifecycleNode):
 
             msg = PoseStamped()
             msg.header.stamp = self.get_clock().now().to_msg()
-            msg.localized = True
+            msg.localized = self._localized
             msg.pose.position.x = x_h
             msg.pose.position.y = y_h
 
@@ -279,6 +290,9 @@ class ParticleFilterNode(LifecycleNode):
         self.last_odometry_callback = time.perf_counter()
 
     def _timer_callback(self):
+        if self._localized:
+            return
+
         if self._finished_flag and len(self.z_odom) > 0:
             self._finished_flag = False
 
@@ -306,6 +320,9 @@ class ParticleFilterNode(LifecycleNode):
             self.z_odom.clear()
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
+        if self._localized:
+            return
+
         msg = AllowMove()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.allowed = True
@@ -369,6 +386,8 @@ class ParticleFilterNode(LifecycleNode):
             msg.pose.orientation.z = q[3]
 
         self.pose_publisher.publish(msg)
+        if self._localized:
+            self.particle_filter_pose_publisher.publish(msg)
 
 
 def main(args=None):

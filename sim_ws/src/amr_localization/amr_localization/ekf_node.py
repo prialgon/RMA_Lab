@@ -11,7 +11,7 @@ import math
 import os
 import time
 import traceback
-from transforms3d.euler import euler2quat
+from transforms3d.euler import euler2quat, quat2euler
 import numpy as np
 
 from amr_localization.ekf import EKF
@@ -36,6 +36,7 @@ class EKFNode(LifecycleNode):
         self.declare_parameter("simulation", False)
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
+        self.declare_parameter("particle_filter_pose_topic", "particle_filter/pose")
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -72,8 +73,10 @@ class EKFNode(LifecycleNode):
                 "world").get_parameter_value().string_value
 
             # Attribute and object initializations
-            self._localized = True
+            self._localized = False
+            self._tracking_enabled = False
             self._steps = 0
+            self._handoff_pose_sigma = np.diag(np.square(np.array(initial_pose_sigma, dtype=float)))
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__),
                              "..", "maps", world + ".json")
@@ -112,6 +115,13 @@ class EKFNode(LifecycleNode):
                 depth=10,
                 reliability=QoSReliabilityPolicy.BEST_EFFORT,
                 durability=QoSDurabilityPolicy.VOLATILE,
+            )
+            
+            self.pose_subscriber = self.create_subscription(
+                PoseStamped,
+                self.get_parameter("particle_filter_pose_topic").get_parameter_value().string_value,
+                callback=self._read_pose_callback,
+                qos_profile=10,
             )
 
             # if self._simulation:
@@ -174,7 +184,33 @@ class EKFNode(LifecycleNode):
             f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
+    
+    def _read_pose_callback(self, msg: PoseStamped) -> None:
+        if self._tracking_enabled or not msg.localized:
+            return
 
+        quaternion = (
+            msg.pose.orientation.w,
+            msg.pose.orientation.x,
+            msg.pose.orientation.y,
+            msg.pose.orientation.z,
+        )
+        _, _, yaw = quat2euler(quaternion)
+        pose = np.array(
+            [
+                msg.pose.position.x,
+                msg.pose.position.y,
+                yaw,
+            ],
+            dtype=float,
+        )
+        self._ekf._pose = pose
+        self._ekf._sigma = self._handoff_pose_sigma.copy()
+        self.last_pose = tuple(pose.tolist())
+        self.last_odometry_callback = None
+        self._localized = True
+        self._tracking_enabled = True
+        self.get_logger().info("Received localized particle-filter pose. EKF tracking is now active.")
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
         """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
@@ -184,6 +220,9 @@ class EKFNode(LifecycleNode):
             scan_msg: Message containing LiDAR sensor readings.
 
         """
+        if not self._tracking_enabled:
+            return
+
         msg: AllowMove = AllowMove()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.allowed = True
@@ -225,7 +264,7 @@ class EKFNode(LifecycleNode):
                 self._ekf.show("Sense", save_figure=True)
 
             start_time = time.perf_counter()
-            self._localized, pose = True, self._ekf._pose
+            self._localized, pose = True, tuple(self._ekf._pose.tolist())
             clustering_time = time.perf_counter() - start_time
 
             self.get_logger().info(
