@@ -27,6 +27,7 @@ namespace amr_localization_cpp
         this->declare_parameter<int>("steps_btw_sense_updates", 10);
         this->declare_parameter<std::string>("world", "lab03");
         this->declare_parameter<std::string>("particle_filter_pose_topic", "particle_filter/pose");
+        this->declare_parameter<std::string>("reset_topic", "particle_filter/reset");
     }
 
     auto ParticleFilterNode::on_configure(const rclcpp_lifecycle::State &state) -> CallbackReturn
@@ -39,6 +40,7 @@ namespace amr_localization_cpp
         try
         {
             const double dt = this->get_parameter("dt").as_double();
+            dt_ = dt;
             enable_plot_ = this->get_parameter("enable_plot").as_bool();
             const bool global_localization = this->get_parameter("global_localization").as_bool();
 
@@ -56,14 +58,21 @@ namespace amr_localization_cpp
                 initial_pose_sigma_vec.at(2)};
 
             const int particles = this->get_parameter("particles").as_int();
+            particle_count_ = particles;
             const double sigma_v = this->get_parameter("sigma_v").as_double();
+            sigma_v_ = sigma_v;
             const double sigma_w = this->get_parameter("sigma_w").as_double();
+            sigma_w_ = sigma_w;
             const double sigma_z = this->get_parameter("sigma_z").as_double();
+            sigma_z_ = sigma_z;
             steps_btw_sense_updates_ = this->get_parameter("steps_btw_sense_updates").as_int();
             simulation_ = this->get_parameter("simulation").as_bool();
             const std::string world = this->get_parameter("world").as_string();
             const std::string particle_filter_pose_topic =
                 this->get_parameter("particle_filter_pose_topic").as_string();
+            reset_topic_ = this->get_parameter("reset_topic").as_string();
+            global_localization_ = global_localization;
+            initial_pose_sigma_ = initial_pose_sigma;
 
             localized_ = false;
             steps_ = 0;
@@ -71,20 +80,9 @@ namespace amr_localization_cpp
             const std::string pkg_share =
                 ament_index_cpp::get_package_share_directory("amr_localization_cpp");
             const std::string map_path = pkg_share + "/maps/" + world + ".json";
+            map_path_ = map_path;
 
-            particle_filter_ = std::make_unique<ParticleFilter>(
-                dt,
-                map_path,
-                particles,
-                sigma_v,
-                sigma_w,
-                sigma_z,
-                8.0,
-                0.16,
-                global_localization,
-                initial_pose_,
-                initial_pose_sigma,
-                simulation_);
+            rebuild_particle_filter();
 
             z_scan_.clear();
             z_odom_.clear();
@@ -100,6 +98,13 @@ namespace amr_localization_cpp
             particle_filter_pose_publisher_ =
                 this->create_publisher<PoseMsg>(particle_filter_pose_topic, 10);
             allowed_movement_publisher_ = this->create_publisher<AllowMoveMsg>("allow_move", 10);
+            if (simulation_)
+            {
+                reset_subscriber_ = this->create_subscription<EmptyMsg>(
+                    reset_topic_,
+                    10,
+                    std::bind(&ParticleFilterNode::reset_localization_callback, this, std::placeholders::_1));
+            }
 
             rclcpp::QoS scan_qos(10);
             scan_qos.best_effort();
@@ -214,15 +219,13 @@ namespace amr_localization_cpp
 
     void ParticleFilterNode::compute_scan_callback(const ScanMsg::SharedPtr scan_msg)
     {
-        if (localized_)
-            return;
+
         z_scan_ = scan_msg->ranges;
     }
 
     void ParticleFilterNode::compute_odometry_callback(const OdomMsg::SharedPtr odom_msg)
     {
-        if (localized_)
-            return;
+
 
         const double z_v = odom_msg->twist.twist.linear.x;
         const double z_w = odom_msg->twist.twist.angular.z;
@@ -263,8 +266,7 @@ namespace amr_localization_cpp
 
     void ParticleFilterNode::timer_callback()
     {
-        if (localized_)
-            return;
+
 
         if (finished_flag_ && !z_odom_.empty())
         {
@@ -301,8 +303,7 @@ namespace amr_localization_cpp
         const OdomMsg::ConstSharedPtr &odom_msg,
         const ScanMsg::ConstSharedPtr &scan_msg)
     {
-        if (localized_)
-            return;
+
 
         AllowMoveMsg msg;
         msg.header.stamp = this->get_clock()->now();
@@ -336,8 +337,7 @@ namespace amr_localization_cpp
             std::numeric_limits<double>::infinity(),
             std::numeric_limits<double>::infinity()};
 
-        if (localized_)
-            return pose;
+
 
         {
             const auto start = std::chrono::steady_clock::now();
@@ -367,8 +367,7 @@ namespace amr_localization_cpp
 
     void ParticleFilterNode::execute_motion_step(double z_v, double z_w)
     {
-        if (localized_)
-            return;
+
 
         const auto start = std::chrono::steady_clock::now();
         particle_filter_->move(z_v, z_w);
@@ -401,6 +400,55 @@ namespace amr_localization_cpp
         {
             particle_filter_pose_publisher_->publish(msg);
         }
+    }
+
+    void ParticleFilterNode::rebuild_particle_filter()
+    {
+        particle_filter_ = std::make_unique<ParticleFilter>(
+            dt_,
+            map_path_,
+            particle_count_,
+            sigma_v_,
+            sigma_w_,
+            sigma_z_,
+            8.0,
+            0.16,
+            global_localization_,
+            initial_pose_,
+            initial_pose_sigma_,
+            simulation_);
+    }
+
+    void ParticleFilterNode::reset_localization_callback(const EmptyMsg::SharedPtr)
+    {
+        if (!simulation_)
+        {
+            return;
+        }
+
+        RCLCPP_WARN(get_logger(), "Restarting particle filter because localization error exceeded the threshold.");
+        rebuild_particle_filter();
+        localized_ = false;
+        steps_ = 0;
+        z_scan_.clear();
+        z_odom_.clear();
+        last_pose_ = initial_pose_;
+        last_odometry_callback_.reset();
+
+        if (enable_plot_)
+        {
+            particle_filter_->show("After reset", true, false, false, true);
+        }
+
+        AllowMoveMsg allow_msg;
+        allow_msg.header.stamp = this->get_clock()->now();
+        allow_msg.allowed = true;
+        allowed_movement_publisher_->publish(allow_msg);
+
+        publish_pose_estimate(
+            std::numeric_limits<double>::infinity(),
+            std::numeric_limits<double>::infinity(),
+            std::numeric_limits<double>::infinity());
     }
 
     geometry_msgs::msg::Quaternion ParticleFilterNode::yaw_to_quaternion(double yaw)

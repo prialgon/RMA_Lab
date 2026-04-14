@@ -7,8 +7,10 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (1.0, 1.0, math.radians(180))
-    goal = (0.2, -0.6)
+    start = (0.2, -0.6, math.radians(270))
+    goal = (-1.0, 0.6)
+    localization_error_position_threshold = 0.50
+    localization_error_angle_threshold = 30.0
 
     particle_filter_node = LifecycleNode(
         package="amr_localization_cpp",
@@ -32,21 +34,22 @@ def generate_launch_description():
         ],
     )
 
-    ekf_node = LifecycleNode(
-        package="amr_localization",
-        executable="ekf",
-        name="ekf",
-        namespace="",
-        output="screen",
-        arguments=["--ros-args", "--log-level", "WARN"],
-        parameters=[
-            {
-                "simulation": simulation,
-                "world": world,
-                "particle_filter_pose_topic": "particle_filter/pose",
-            }
-        ],
-    )
+    # ekf_node = LifecycleNode(
+    #     package="amr_localization",
+    #     executable="ekf",
+    #     name="ekf",
+    #     namespace="",
+    #     output="screen",
+    #     arguments=["--ros-args", "--log-level", "WARN"],
+    #     parameters=[
+    #         {
+    #             "enable_plot": True,
+    #             "simulation": simulation,
+    #             "world": world,
+    #             "particle_filter_pose_topic": "particle_filter/pose",
+    #         }
+    #     ],
+    # )
 
     probabilistic_roadmap_node = LifecycleNode(
         package="amr_planning",
@@ -60,9 +63,9 @@ def generate_launch_description():
                 "connection_distance": 0.15,
                 "enable_plot": True,
                 "goal": goal,
-                "grid_size": 0.1,
-                "node_count": 250,
-                "obstacle_safety_distance": 0.12,
+                "grid_size": 0.0869420,
+                "node_count": 500,
+                "obstacle_safety_distance": 0.15,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
@@ -97,7 +100,8 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.2,
+                "lookahead_distance": 0.25,
+                "goal_tolerance": 0.05,
                 "simulation": simulation,
             }
         ],
@@ -115,6 +119,8 @@ def generate_launch_description():
                 "enable_localization": True,
                 "goal": goal,
                 "pose_tolerance": (0.1, 10.0),
+                "localization_error_position_threshold": localization_error_position_threshold,
+                "localization_error_angle_threshold": localization_error_angle_threshold,
                 "start": start,
             }
         ],
@@ -129,7 +135,6 @@ def generate_launch_description():
             {
                 "node_startup_order": (
                     "particle_filter",
-                    "ekf",
                     "probabilistic_roadmap",
                     "wall_follower",
                     "pure_pursuit",
@@ -142,7 +147,6 @@ def generate_launch_description():
     return LaunchDescription(
         [
             particle_filter_node,
-            ekf_node,
             probabilistic_roadmap_node,
             wall_follower_node,
             pure_pursuit_node,

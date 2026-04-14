@@ -22,6 +22,7 @@
   <depend>tf2_ros</depend>
   <depend>lifecycle_msgs</depend>
   <depend>amr_msgs</depend>
+  <depend>std_msgs</depend>
 
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-matplotlib</exec_depend>

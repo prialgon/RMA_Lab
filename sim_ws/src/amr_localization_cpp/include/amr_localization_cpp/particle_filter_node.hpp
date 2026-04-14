@@ -13,6 +13,7 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp_lifecycle/lifecycle_publisher.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <std_msgs/msg/empty.hpp>
 
 #include <chrono>
 #include <memory>
@@ -45,6 +46,7 @@ namespace amr_localization_cpp
         using AllowMoveMsg = amr_msgs::msg::AllowMove;
         using OdomMsg = nav_msgs::msg::Odometry;
         using ScanMsg = sensor_msgs::msg::LaserScan;
+        using EmptyMsg = std_msgs::msg::Empty;
 
         using ApproxPolicy =
             message_filters::sync_policies::ApproximateTime<OdomMsg, ScanMsg>;
@@ -56,6 +58,8 @@ namespace amr_localization_cpp
         void compute_pose_callback(
             const OdomMsg::ConstSharedPtr &odom_msg,
             const ScanMsg::ConstSharedPtr &scan_msg);
+        void reset_localization_callback(const EmptyMsg::SharedPtr msg);
+        void rebuild_particle_filter();
 
         std::tuple<double, double, double> execute_measurement_step(
             const std::vector<float> &z_scan);
@@ -73,6 +77,8 @@ namespace amr_localization_cpp
         int steps_btw_sense_updates_{10};
 
         std::tuple<double, double, double> initial_pose_{0.0, 0.0, 0.0};
+        std::tuple<double, double, double> initial_pose_sigma_{0.05, 0.05, 5.0 * 3.14159265358979323846 / 180.0};
+        std::string map_path_;
         std::tuple<double, double, double> last_pose_{0.0, 0.0, 0.0};
 
         std::optional<std::chrono::steady_clock::time_point> last_odometry_callback_;
@@ -82,11 +88,20 @@ namespace amr_localization_cpp
 
         std::unique_ptr<ParticleFilter> particle_filter_;
 
+        int particle_count_{100};
+        double dt_{0.05};
+        double sigma_v_{0.1};
+        double sigma_w_{0.1};
+        double sigma_z_{0.1};
+        bool global_localization_{true};
+        std::string reset_topic_{"particle_filter/reset"};
+
         rclcpp_lifecycle::LifecyclePublisher<PoseMsg>::SharedPtr pose_publisher_;
         rclcpp_lifecycle::LifecyclePublisher<PoseMsg>::SharedPtr particle_filter_pose_publisher_;
         rclcpp_lifecycle::LifecyclePublisher<AllowMoveMsg>::SharedPtr allowed_movement_publisher_;
 
         rclcpp::Subscription<ScanMsg>::SharedPtr laser_scan_subscriber_;
+        rclcpp::Subscription<EmptyMsg>::SharedPtr reset_subscriber_;
         rclcpp::Subscription<OdomMsg>::SharedPtr odometry_subscriber_;
         rclcpp::TimerBase::SharedPtr timer_;
 

@@ -32,6 +32,7 @@ class WallFollowerNode(LifecycleNode):
         self.odom_msg: Odometry = None
         self.scan_msg: LaserScan = None
         self.pose_msg: PoseStamped = None
+        self._localized_stopped: bool = False
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -99,22 +100,19 @@ class WallFollowerNode(LifecycleNode):
                 qos_profile=10,
                 callback=self._compute_allow_move_callback,
             )
-            # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
 
             if enable_localization:
-                self._subscribers.append(
-                    message_filters.Subscriber(
-                        self,
-                        PoseStamped,
-                        "pose",
-                        qos_profile=10,
-                    )
+                self._pose_subscriber = self.create_subscription(
+                    PoseStamped,
+                    "pose",
+                    self._pose_callback,
+                    10,
                 )
 
             ts = message_filters.ApproximateTimeSynchronizer(
                 self._subscribers,
                 queue_size=10,
-                slop=0.15 if not self._simulation else 9,
+                slop=0.15,
             )
 
             ts.registerCallback(self._read_commands_callback)
@@ -136,21 +134,27 @@ class WallFollowerNode(LifecycleNode):
 
         return super().on_activate(state)
 
+    def _pose_callback(self, pose_msg: PoseStamped):
+        self.pose_msg = pose_msg
+
+        if pose_msg.localized and not self._localized_stopped:
+            self._localized_stopped = True
+            if self.allowed_move:
+                self._publish_velocity_commands(0.0, 0.0)
+        elif not pose_msg.localized:
+            self._localized_stopped = False
+
     def _read_commands_callback(
-        self, odom_msg: Odometry, scan_msg: LaserScan, pose_msg: PoseStamped = PoseStamped()
+        self, odom_msg: Odometry, scan_msg: LaserScan
     ):
         # self.get_logger().warn("Reading information")
-        self.pose_msg = pose_msg
-        if not pose_msg.localized:
-            # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
-            self.odom_msg = odom_msg
+        self.odom_msg = odom_msg
+        self.scan_msg = scan_msg
 
-            self.scan_msg = scan_msg
+        if self._simulation:
+            self._compute_commands_callback()
 
-            if self.get_parameter("simulation"):
-                self._compute_commands_callback()
-
-            # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
+        # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
 
     def _compute_commands_callback(self):
         """Subscriber callback. Executes a wall-following controller and publishes v and w commands.

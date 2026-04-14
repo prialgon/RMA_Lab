@@ -22,6 +22,7 @@ class PurePursuitNode(LifecycleNode):
         # Parameters
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("lookahead_distance", 0.2)
+        self.declare_parameter("goal_tolerance", 0.05)
         self.declare_parameter("simulation", False)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
@@ -41,6 +42,9 @@ class PurePursuitNode(LifecycleNode):
                 self.get_parameter(
                     "lookahead_distance").get_parameter_value().double_value
             )
+            goal_tolerance = (
+                self.get_parameter("goal_tolerance").get_parameter_value().double_value
+            )
             self._simulation = self.get_parameter(
                 "simulation").get_parameter_value().bool_value
 
@@ -48,6 +52,7 @@ class PurePursuitNode(LifecycleNode):
             self._pure_pursuit = PurePursuit(
                 dt,
                 lookahead_distance,
+                goal_tolerance=goal_tolerance,
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )

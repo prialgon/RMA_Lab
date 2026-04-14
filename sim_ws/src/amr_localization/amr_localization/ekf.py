@@ -265,6 +265,7 @@ class EKF:
         figure.tight_layout()  # Reduce white margins
 
         if display:
+            plt.ion()
             plt.show(block=block)
             plt.pause(0.001)  # Wait 1 ms or the figure won't be displayed
 

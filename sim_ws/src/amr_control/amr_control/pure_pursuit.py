@@ -8,6 +8,7 @@ class PurePursuit:
         self,
         dt: float,
         lookahead_distance: float = 0.5,
+        goal_tolerance: float = 0.05,
         logger=None,
         simulation: bool = False,
     ):
@@ -16,6 +17,7 @@ class PurePursuit:
         Args:
             dt: Sampling period [s].
             lookahead_distance: Distance to the next target point [m].
+            goal_tolerance: Distance to the final path point considered reached [m].
             logger: Logger object to output messages with different severity levels.
             simulation: True if running in simulation, False if running on the real robot.
 
@@ -23,6 +25,7 @@ class PurePursuit:
         self._dt: float = dt
         self._logger = logger
         self._lookahead_distance: float = lookahead_distance
+        self._goal_tolerance: float = goal_tolerance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
 
@@ -47,7 +50,7 @@ class PurePursuit:
             return 0.0, 0.0
 
         dist_to_goal = math.dist((x, y), self.path[-1])
-        if dist_to_goal < 0.1:
+        if dist_to_goal < self._goal_tolerance:
             return 0.0, 0.0
 
         current_point, current_idx = self._find_closest_point(x, y)

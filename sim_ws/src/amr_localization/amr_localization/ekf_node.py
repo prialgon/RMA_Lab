@@ -75,6 +75,7 @@ class EKFNode(LifecycleNode):
             # Attribute and object initializations
             self._localized = False
             self._tracking_enabled = False
+            self._interactive_plot_active = False
             self._steps = 0
             self._handoff_pose_sigma = np.diag(np.square(np.array(initial_pose_sigma, dtype=float)))
             map_path = os.path.realpath(
@@ -210,6 +211,11 @@ class EKFNode(LifecycleNode):
         self.last_odometry_callback = None
         self._localized = True
         self._tracking_enabled = True
+
+        if self._enable_plot:
+            self._interactive_plot_active = True
+            self._ekf.show("PF handoff", display=True, save_figure=True)
+
         self.get_logger().info("Received localized particle-filter pose. EKF tracking is now active.")
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
@@ -261,7 +267,11 @@ class EKFNode(LifecycleNode):
             self.get_logger().info(f"Correct step time: {sense_time:6.3f} s")
 
             if self._enable_plot:
-                self._ekf.show("Sense", save_figure=True)
+                self._ekf.show(
+                    "Sense",
+                    display=self._interactive_plot_active,
+                    save_figure=True,
+                )
 
             start_time = time.perf_counter()
             self._localized, pose = True, tuple(self._ekf._pose.tolist())
@@ -286,7 +296,11 @@ class EKFNode(LifecycleNode):
         self.get_logger().info(f"Move step time: {move_time:7.3f} s")
 
         if self._enable_plot:
-            self._ekf.show("Move", save_figure=True)
+            self._ekf.show(
+                "Move",
+                display=self._interactive_plot_active,
+                save_figure=True,
+            )
 
         return n_mu, n_sigma
 

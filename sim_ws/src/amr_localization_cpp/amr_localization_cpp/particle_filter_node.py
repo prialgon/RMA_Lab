@@ -19,6 +19,7 @@ from sensor_msgs.msg import LaserScan
 from transforms3d.euler import euler2quat
 
 from amr_msgs.msg import PoseStamped, AllowMove
+from std_msgs.msg import Empty
 from amr_localization_cpp._pf_core import ParticleFilterCore
 from amr_localization_cpp.maps import Map
 
@@ -40,6 +41,7 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("steps_btw_sense_updates", 10)
         self.declare_parameter("world", "lab03")
         self.declare_parameter("particle_filter_pose_topic", "particle_filter/pose")
+        self.declare_parameter("reset_topic", "particle_filter/reset")
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
@@ -65,28 +67,23 @@ class ParticleFilterNode(LifecycleNode):
             ).get_parameter_value().integer_value
             self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
             world = self.get_parameter("world").get_parameter_value().string_value
+            self._reset_topic = self.get_parameter("reset_topic").get_parameter_value().string_value
 
             self._localized = False
             self._localized_confirmed = False
             self._steps = 0
+            self._global_localization = global_localization
+            self._initial_pose_sigma = initial_pose_sigma
+            self._particle_count = particles
+            self._sigma_v = sigma_v
+            self._sigma_w = sigma_w
+            self._sigma_z = sigma_z
 
             pkg_share = get_package_share_directory("amr_localization_cpp")
             map_path = os.path.join(pkg_share, "maps", world + ".json")
+            self._map_path = map_path
 
-            self._particle_filter = ParticleFilterCore(
-                dt=dt,
-                map_path=map_path,
-                particle_count=particles,
-                sigma_v=sigma_v,
-                sigma_w=sigma_w,
-                sigma_z=sigma_z,
-                sensor_range_max=8.0,
-                sensor_range_min=0.16,
-                global_localization=global_localization,
-                initial_pose=self.initial_pose,
-                initial_pose_sigma=initial_pose_sigma,
-                simulation=self._simulation,
-            )
+            self._particle_filter = self._build_particle_filter()
 
             # ------------------------------------------------------------------ #
             # Plotting setup — only initialised when enable_plot is True          #
@@ -159,6 +156,16 @@ class ParticleFilterNode(LifecycleNode):
                 qos_profile=10,
             )
 
+            if self._simulation:
+                self.reset_subscriber = self.create_subscription(
+                    Empty,
+                    self._reset_topic,
+                    self._reset_localization_callback,
+                    10,
+                )
+            else:
+                self.reset_subscriber = None
+
         except Exception:
             self.get_logger().error(traceback.format_exc())
             return TransitionCallbackReturn.ERROR
@@ -168,6 +175,46 @@ class ParticleFilterNode(LifecycleNode):
     def on_activate(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"Transitioning from '{state.label}' to 'active' state.")
         return super().on_activate(state)
+    def _build_particle_filter(self):
+        return ParticleFilterCore(
+            dt=self.get_parameter("dt").get_parameter_value().double_value,
+            map_path=self._map_path,
+            particle_count=self._particle_count,
+            sigma_v=self._sigma_v,
+            sigma_w=self._sigma_w,
+            sigma_z=self._sigma_z,
+            sensor_range_max=8.0,
+            sensor_range_min=0.16,
+            global_localization=self._global_localization,
+            initial_pose=self.initial_pose,
+            initial_pose_sigma=self._initial_pose_sigma,
+            simulation=self._simulation,
+        )
+
+    def _reset_localization_callback(self, _msg: Empty) -> None:
+        if not self._simulation:
+            return
+
+        self.get_logger().warn("Restarting particle filter because localization error exceeded the threshold.")
+
+        self._particle_filter = self._build_particle_filter()
+        self._localized = False
+        self._localized_confirmed = False
+        self._steps = 0
+        self.z_scan = []
+        self.z_odom.clear()
+        self.last_pose = self.initial_pose
+        self.last_odometry_callback = None
+
+        if self._enable_plot:
+            self._show_particles(title="after reset", save_figure=True)
+
+        msg = AllowMove()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.allowed = True
+        self.allowed_movement_publisher.publish(msg)
+
+        self._publish_pose_estimate(float("inf"), float("inf"), float("inf"))
 
     # ---------------------------------------------------------------------- #
     # Plotting helpers                                                         #
@@ -251,14 +298,9 @@ class ParticleFilterNode(LifecycleNode):
     # ---------------------------------------------------------------------- #
 
     def _compute_scan_callback(self, scan_msg: LaserScan) -> None:
-        if self._localized:
-            return
         self.z_scan = list(scan_msg.ranges)
 
     def _compute_odometry_callback(self, odom_msg: Odometry) -> None:
-        if self._localized:
-            return
-
         z_v = odom_msg.twist.twist.linear.x
         z_w = odom_msg.twist.twist.angular.z
 
@@ -290,9 +332,6 @@ class ParticleFilterNode(LifecycleNode):
         self.last_odometry_callback = time.perf_counter()
 
     def _timer_callback(self):
-        if self._localized:
-            return
-
         if self._finished_flag and len(self.z_odom) > 0:
             self._finished_flag = False
 
@@ -320,9 +359,6 @@ class ParticleFilterNode(LifecycleNode):
             self.z_odom.clear()
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
-        if self._localized:
-            return
-
         msg = AllowMove()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.allowed = True

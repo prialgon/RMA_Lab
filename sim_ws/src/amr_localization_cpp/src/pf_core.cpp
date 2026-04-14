@@ -188,10 +188,11 @@ public:
         if (n == 0)
             return {localized, pose};
 
+        Eigen::MatrixXd coords = particles_.leftCols(2);
+
         nb::module_ sklearn_cluster = nb::module_::import_("sklearn.cluster");
         nb::object dbscan = sklearn_cluster.attr("DBSCAN")("eps"_a = 0.2, "min_samples"_a = 5);
 
-        Eigen::MatrixXd coords = particles_.leftCols(2);
         nb::object fit_res = dbscan.attr("fit")(coords);
                 nb::list py_labels = nb::cast<nb::list>(fit_res.attr("labels_").attr("tolist")());
 
@@ -246,11 +247,26 @@ public:
 
             if (particles_.rows() > 50)
             {
-                particles_ = init_particles(
-                    50,
-                    false,
-                    pose,
-                    {0.05, 0.05, 5.0 * M_PI / 180.0});
+                Eigen::MatrixXd new_particles(50, 3);
+                int count = 0;
+                for (int i = 0; i < n && count < 50; ++i)
+                {
+                    if (labels[i] == valid_labels[0])
+                    {
+                        new_particles.row(count++) = particles_.row(i);
+                    }
+                }
+                while (count > 0 && count < 50)
+                {
+                    new_particles.row(count) = new_particles.row(count % count);
+                    count++;
+                }
+                if (count == 0) // Should not happen if there is a cluster
+                {
+                    for (int i = 0; i < 50; ++i)
+                        new_particles.row(i) = particles_.row(0);
+                }
+                particles_ = new_particles;
             }
 
             localized = true;
