@@ -227,7 +227,7 @@ namespace amr_localization_cpp
         const double z_v = odom_msg->twist.twist.linear.x;
         const double z_w = odom_msg->twist.twist.angular.z;
 
-        if (std::abs(z_v) >= 0.01 && std::abs(z_w) >= 0.1)
+        if (std::abs(z_v) >= 0.01 || std::abs(z_w) >= 0.1)
         {
             z_odom_.push_back({z_v, z_w});
         }
@@ -314,8 +314,16 @@ namespace amr_localization_cpp
         const std::vector<float> z_scan = scan_msg->ranges;
 
         execute_motion_step(z_v, z_w);
-        const auto [x_h, y_h, theta_h] = execute_measurement_step(z_scan);
         steps_ += 1;
+
+        double x_h = std::numeric_limits<double>::infinity();
+        double y_h = std::numeric_limits<double>::infinity();
+        double theta_h = std::numeric_limits<double>::infinity();
+
+        if (localized_ || (steps_btw_sense_updates_ > 0 && steps_ % steps_btw_sense_updates_ == 0))
+        {
+            std::tie(x_h, y_h, theta_h) = execute_measurement_step(z_scan);
+        }
 
         publish_pose_estimate(x_h, y_h, theta_h);
     }
