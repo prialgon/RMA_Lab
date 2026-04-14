@@ -77,6 +77,18 @@ public:
             false,
             true);
 
+        nb::list py_segments = nb::cast<nb::list>(map_obj_.attr("_map_segments"));
+        for (auto seg : py_segments)
+        {
+            nb::sequence pts = nb::cast<nb::sequence>(seg);
+            nb::sequence p0 = nb::cast<nb::sequence>(pts[0]);
+            nb::sequence p1 = nb::cast<nb::sequence>(pts[1]);
+            map_segments_.push_back({
+                Point2D{nb::cast<double>(p0[0]), nb::cast<double>(p0[1])},
+                Point2D{nb::cast<double>(p1[0]), nb::cast<double>(p1[1])}
+            });
+        }
+
         particles_ = init_particles(
             particle_count_,
             global_localization,
@@ -176,71 +188,26 @@ public:
         if (n == 0)
             return {localized, pose};
 
-        constexpr double eps = 0.2;
-        constexpr double eps2 = eps * eps;
-        constexpr int min_samples = 5;
+        nb::module_ sklearn_cluster = nb::module_::import_("sklearn.cluster");
+        nb::object dbscan = sklearn_cluster.attr("DBSCAN")("eps"_a = 0.2, "min_samples"_a = 5);
 
-        std::vector<int> labels(n, -99);
-        int next_cluster_id = 0;
+        Eigen::MatrixXd coords = particles_.leftCols(2);
+        nb::object fit_res = dbscan.attr("fit")(coords);
+                nb::list py_labels = nb::cast<nb::list>(fit_res.attr("labels_").attr("tolist")());
 
-        auto region_query = [&](int i)
+        std::vector<int> labels;
+        labels.reserve(n);
+        for (auto item : py_labels)
         {
-            std::vector<int> neighbors;
-            neighbors.reserve(n);
-            for (int j = 0; j < n; ++j)
-            {
-                double dx = particles_(i, 0) - particles_(j, 0);
-                double dy = particles_(i, 1) - particles_(j, 1);
-                if (dx * dx + dy * dy <= eps2)
-                    neighbors.push_back(j);
-            }
-            return neighbors;
-        };
-
-        for (int i = 0; i < n; ++i)
-        {
-            if (labels[i] != -99)
-                continue;
-
-            auto neighbors = region_query(i);
-            if (static_cast<int>(neighbors.size()) < min_samples)
-            {
-                labels[i] = -1;
-                continue;
-            }
-
-            labels[i] = next_cluster_id;
-            std::queue<int> q;
-            for (int nb : neighbors)
-                q.push(nb);
-
-            while (!q.empty())
-            {
-                int j = q.front();
-                q.pop();
-
-                if (labels[j] == -1)
-                    labels[j] = next_cluster_id;
-
-                if (labels[j] != -99)
-                    continue;
-
-                labels[j] = next_cluster_id;
-                auto nb_neighbors = region_query(j);
-
-                if (static_cast<int>(nb_neighbors.size()) >= min_samples)
-                {
-                    for (int nb2 : nb_neighbors)
-                        q.push(nb2);
-                }
-            }
-
-            next_cluster_id++;
+            labels.push_back(nb::cast<int>(item));
         }
 
         std::vector<int> valid_labels;
-        for (int id = 0; id < next_cluster_id; ++id)
-            valid_labels.push_back(id);
+        for (int lab : labels)
+        {
+            if (lab != -1 && std::find(valid_labels.begin(), valid_labels.end(), lab) == valid_labels.end())
+                valid_labels.push_back(lab);
+        }
 
         auto mean_pose_of_cluster = [&](int target_label)
         {
@@ -292,7 +259,9 @@ public:
         else
         {
             if (static_cast<int>(valid_labels.size()) < n_prev_clusters_)
+            {
                 particle_count_ = std::max(50, static_cast<int>(particle_count_ * 0.8));
+            }
 
             std::unordered_map<int, int> counts;
             for (int lab : labels)
@@ -401,27 +370,137 @@ private:
         return rays;
     }
 
+    double compute_intercept(double slope, double x, double y) const {
+        return y - slope * x;
+    }
+
+    double compute_slope(double x0, double y0, double x1, double y1) const {
+        double slope = std::numeric_limits<double>::infinity();
+        if (std::fabs(x1 - x0) >= 1e-6)
+            slope = (y1 - y0) / (x1 - x0);
+        return slope;
+    }
+
+    void intersect(
+        double* xi, double* yi, 
+        double x0, double y0, double x1, double y1, 
+        double x2, double y2, double x3, double y3
+    ) const {
+        double m1 = compute_slope(x0, y0, x1, y1);
+        double m2 = compute_slope(x2, y2, x3, y3);
+        double b1, b2;
+        *xi = std::numeric_limits<double>::quiet_NaN();
+        *yi = std::numeric_limits<double>::quiet_NaN();
+
+        if (!std::isinf(m1) && !std::isinf(m2)) {
+            b1 = compute_intercept(m1, x0, y0);
+            b2 = compute_intercept(m2, x2, y2);
+
+            if (std::fabs(m1 - m2) >= 1e-6) {
+                *xi = (b2 - b1) / (m1 - m2);
+            }
+
+            *yi = m1 * *xi + b1;
+        }
+        else if (std::isinf(m1) && !std::isinf(m2)) {
+            b2 = compute_intercept(m2, x2, y2);
+            *xi = x0;
+            *yi = m2 * *xi + b2;
+        }
+        else if (std::isinf(m2) && !std::isinf(m1)) {
+            b1 = compute_intercept(m1, x0, y0);
+            *xi = x2;
+            *yi = m1 * *xi + b1;
+        }
+    }
+
+    double round6(double x) const {
+        return std::round(x * 1e6) / 1e6; 
+    }
+
+    bool segment_intersect(
+        double* xi, double* yi, 
+        double x0, double y0, double x1, double y1, 
+        double x2, double y2, double x3, double y3
+    ) const {
+        intersect(xi, yi, x0, y0, x1, y1, x2, y2, x3, y3);
+
+        if (std::isnan(*xi) || std::isnan(*yi))
+            return false;
+
+        double xr0 = round6(x0);  
+        double xr1 = round6(x1);
+        double xr2 = round6(x2);
+        double xr3 = round6(x3);
+        double xri = round6(*xi);
+        double yr0 = round6(y0);  
+        double yr1 = round6(y1);
+        double yr2 = round6(y2);
+        double yr3 = round6(y3);
+        double yri = round6(*yi);
+
+        if (xr0 < xr1) {
+            if (xri < xr0 || xri > xr1) return false;
+        } else {
+            if (xri > xr0 || xri < xr1) return false;
+        }
+
+        if (yr0 < yr1) {
+            if (yri < yr0 || yri > yr1) return false;
+        } else {
+            if (yri > yr0 || yri < yr1) return false;
+        }
+
+        if (xr2 < xr3) {
+            if (xri < xr2 || xri > xr3) return false;
+        } else {
+            if (xri > xr2 || xri < xr3) return false;
+        }
+
+        if (yr2 < yr3) {
+            if (yri < yr2 || yri > yr3) return false;
+        } else {
+            if (yri > yr2 || yri < yr3) return false;
+        }
+
+        return true;
+    }
+
     std::tuple<std::optional<Point2D>, double> check_collision(const Segment2D &segment,
                                                                bool compute_distance) const
     {
-        nb::list seg;
-        seg.append(std::make_tuple(segment[0].x, segment[0].y));
-        seg.append(std::make_tuple(segment[1].x, segment[1].y));
+        std::vector<Point2D> intersections;
+        
+        for (const auto& map_seg : map_segments_) {
+            double xi = std::numeric_limits<double>::quiet_NaN();
+            double yi = std::numeric_limits<double>::quiet_NaN();
+            if (segment_intersect(&xi, &yi,
+                segment[0].x, segment[0].y, segment[1].x, segment[1].y,
+                map_seg[0].x, map_seg[0].y, map_seg[1].x, map_seg[1].y)) {
+                intersections.push_back({xi, yi});
+            }
+        }
 
-        auto result = map_obj_.attr("check_collision")(seg, compute_distance);
-        nb::tuple tup = nb::cast<nb::tuple>(result);
+        double distance = std::numeric_limits<double>::quiet_NaN();
+        std::optional<Point2D> closest_intersection = std::nullopt;
 
-        nb::object py_intersection = tup[0];
-        double dist = nb::cast<double>(tup[1]);
+        if (!intersections.empty()) {
+            if (compute_distance || intersections.size() > 1) {
+                double min_dist = std::numeric_limits<double>::infinity();
+                for (const auto& pt : intersections) {
+                    double dist = std::hypot(pt.x - segment[0].x, pt.y - segment[0].y);
+                    if (dist < min_dist) {
+                        min_dist = dist;
+                        closest_intersection = pt;
+                    }
+                }
+                distance = min_dist;
+            } else {
+                closest_intersection = intersections[0];
+            }
+        }
 
-        if (py_intersection.is_none())
-            return {std::nullopt, dist};
-
-        if (nb::isinstance<nb::list>(py_intersection) && nb::len(py_intersection) == 0)
-            return {std::nullopt, dist};
-
-        auto pt = nb::cast<std::tuple<double, double>>(py_intersection);
-        return {Point2D{std::get<0>(pt), std::get<1>(pt)}, dist};
+        return {closest_intersection, distance};
     }
 
     std::vector<double> sense(const std::array<double, 3> &pose) const
@@ -507,6 +586,7 @@ private:
     int n_prev_clusters_;
 
     nb::object map_obj_;
+    std::vector<Segment2D> map_segments_;
     Eigen::MatrixXd particles_;
     std::mt19937 rng_;
 };

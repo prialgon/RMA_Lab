@@ -46,17 +46,28 @@ class PurePursuit:
         if len(self.path) == 0:
             return 0.0, 0.0
 
+        dist_to_goal = math.dist((x, y), self.path[-1])
+        if dist_to_goal < 0.1:
+            return 0.0, 0.0
+
         current_point, current_idx = self._find_closest_point(x, y)
         target_point = self._find_target_point((x, y), current_idx)
 
         l: float = math.dist((x, y), target_point)
         beta: float = math.atan2((target_point[1] - y), (target_point[0] - x))
         alpha: float = beta - theta
-        w = 2 * v * math.sin(alpha) / l
+        
+        # Normalize alpha between -pi and pi
+        alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
 
-        if alpha > math.pi / 3:
+        if l > 1e-4:
+            w = 2 * v * math.sin(alpha) / l
+        else:
+            w = 0.0
+
+        if abs(alpha) > math.pi / 3:
             v = 0.0
-            w = 2.0
+            w = math.copysign(2.0, alpha)
 
         return v, w
 

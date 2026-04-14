@@ -12,6 +12,8 @@ from transforms3d.euler import quat2euler
 from amr_control.pure_pursuit import PurePursuit
 
 
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 class PurePursuitNode(LifecycleNode):
     def __init__(self):
         """Pure pursuit node initializer."""
@@ -66,8 +68,14 @@ class PurePursuitNode(LifecycleNode):
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
+            path_qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            )
             self._subscriber_path = self.create_subscription(
-                Path, "path", self._path_callback, 10)
+                Path, "path", self._path_callback, qos_profile=path_qos_profile)
 
             self._subscriber_allow_move = self.create_subscription(
                 AllowMove, "allow_move", self._allow_move_callback, 10

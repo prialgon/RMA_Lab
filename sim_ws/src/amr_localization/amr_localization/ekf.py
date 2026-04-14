@@ -179,6 +179,9 @@ class EKF:
     def correct(self, n_mu, n_sigma, measurements):
         n = 16
 
+        # Clean measurements
+        measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
+
         step = len(measurements) // n
         downsampled_measurements = np.array([measurements[i] for i in range(0, n * step, step)])
 
@@ -300,7 +303,12 @@ class EKF:
         rays = self._lidar_rays(pose, np.arange(n).tolist(), degree_increment=360 / n)
 
         for ray in rays:
-            z_hat.append(self._map.check_collision(ray, compute_distance=True)[1])
+            dist = self._map.check_collision(ray, compute_distance=True)[1]
+            if math.isnan(dist) or dist > self._sensor_range_max:
+                dist = self._sensor_range_max
+            elif dist < self._sensor_range_min:
+                dist = self._sensor_range_min
+            z_hat.append(dist)
 
         return np.array(z_hat)
 
