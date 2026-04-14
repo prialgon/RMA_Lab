@@ -23,7 +23,7 @@ def generate_launch_description():
             {
                 "enable_plot": False,
                 "global_localization": True,
-                "particles": 2000,
+                "particles": 4000,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,
@@ -100,8 +100,8 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.25,
-                "goal_tolerance": 0.05,
+                "lookahead_distance": 0.2,
+                "goal_tolerance": 0.01,
                 "simulation": simulation,
             }
         ],

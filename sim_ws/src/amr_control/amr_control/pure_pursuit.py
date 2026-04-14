@@ -43,7 +43,7 @@ class PurePursuit:
 
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-        v = 0.15
+        v = 0.16
         w = 0.0
 
         if len(self.path) == 0:
