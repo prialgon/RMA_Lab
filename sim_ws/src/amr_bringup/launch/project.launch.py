@@ -23,7 +23,7 @@ def generate_launch_description():
             {
                 "enable_plot": False,
                 "global_localization": True,
-                "particles": 4000,
+                "particles": 3000,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
                 "sigma_z": 0.2,
@@ -61,7 +61,7 @@ def generate_launch_description():
         parameters=[
             {
                 "connection_distance": 0.15,
-                "enable_plot": True,
+                "enable_plot": False,
                 "goal": goal,
                 "grid_size": 0.0869420,
                 "node_count": 500,
