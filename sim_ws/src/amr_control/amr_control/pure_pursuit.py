@@ -42,10 +42,7 @@ class PurePursuit:
             w: Angular velocity [rad/s].
 
         """
-        # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-        v = 0.16
-        w = 0.0
-
+        
         if len(self.path) == 0:
             return 0.0, 0.0
 
@@ -53,24 +50,29 @@ class PurePursuit:
         if dist_to_goal < self._goal_tolerance:
             return 0.0, 0.0
 
-        current_point, current_idx = self._find_closest_point(x, y)
+        _, current_idx = self._find_closest_point(x, y)
         target_point = self._find_target_point((x, y), current_idx)
 
-        l: float = math.dist((x, y), target_point)
-        beta: float = math.atan2((target_point[1] - y), (target_point[0] - x))
-        alpha: float = beta - theta
-        
-        # Normalize alpha between -pi and pi
-        alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
+        lookahead_distance = max(math.dist((x, y), target_point), 1e-6)
+        beta = math.atan2(target_point[1] - y, target_point[0] - x)
+        alpha = (beta - theta + math.pi) % (2 * math.pi) - math.pi
+        curvature = 2.0 * math.sin(alpha) / lookahead_distance
 
-        if l > 1e-4:
-            w = 2 * v * math.sin(alpha) / l
-        else:
-            w = 0.0
+        max_linear_speed = 0.22 if self._simulation else 0.16
+        min_linear_speed = 0.08 if self._simulation else 0.05
+        max_angular_speed = 2.0 if self._simulation else 1.5
 
-        if abs(alpha) > math.pi / 3:
-            v = 0.0
-            w = math.copysign(2.0, alpha)
+        if abs(alpha) > math.pi / 2:
+            return 0.0, math.copysign(max_angular_speed, alpha)
+
+        heading_scale = max(0.25, 1.0 - abs(alpha) / (math.pi / 2))
+        v = max_linear_speed * heading_scale
+
+        if dist_to_goal < self._lookahead_distance:
+            v *= max(0.35, dist_to_goal / max(self._lookahead_distance, 1e-6))
+
+        v = min(max_linear_speed, max(min_linear_speed, v))
+        w = max(-max_angular_speed, min(max_angular_speed, curvature * v))
 
         return v, w
 
@@ -112,27 +114,10 @@ class PurePursuit:
     def _find_target_point(
         self, origin_xy: tuple[float, float], origin_idx: int
     ) -> tuple[float, float]:
-        """Find the destination path point based on the lookahead distance.
-
-        Args:
-            origin_xy: Current location of the robot (x, y) [m].
-            origin_idx: Index of the current path point.
-
-        Returns:
-            tuple[float, float]: (x, y) coordinates of the target point [m].
-
-        """
-        # TODO: 4.10. Complete the function body with your code (i.e., determine target_xy).
-        target_xy = None
-
-        candidates = []
+        """Find the destination path point based on the lookahead distance."""
         for node_idx in range(origin_idx, len(self.path)):
-            if math.dist(self.path[node_idx], origin_xy) > self._lookahead_distance:
-                candidates.append((self.path[node_idx], math.dist(self.path[node_idx], origin_xy)))
+            node = self.path[node_idx]
+            if math.dist(node, origin_xy) > self._lookahead_distance:
+                return node
 
-        if len(candidates) == 0:
-            target_xy = self.path[-1]
-        else:
-            target_xy = min(candidates, key=lambda x: x[1])[0]
-
-        return target_xy
+        return self.path[-1]

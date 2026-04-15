@@ -11,8 +11,8 @@ from transforms3d.euler import quat2euler
 
 from amr_control.pure_pursuit import PurePursuit
 
-
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 
 class PurePursuitNode(LifecycleNode):
     def __init__(self):
@@ -33,43 +33,37 @@ class PurePursuitNode(LifecycleNode):
 
         """
         self.get_logger().info(
-            f"Transitioning from '{state.label}' to 'inactive' state.")
+            f"Transitioning from '{state.label}' to 'inactive' state."
+        )
 
         try:
-            # Parameters
             dt = self.get_parameter("dt").get_parameter_value().double_value
             lookahead_distance = (
-                self.get_parameter(
-                    "lookahead_distance").get_parameter_value().double_value
+                self.get_parameter("lookahead_distance").get_parameter_value().double_value
             )
             goal_tolerance = (
                 self.get_parameter("goal_tolerance").get_parameter_value().double_value
             )
             self._simulation = self.get_parameter(
-                "simulation").get_parameter_value().bool_value
+                "simulation"
+            ).get_parameter_value().bool_value
 
-            # Attribute and object initializations
             self._pure_pursuit = PurePursuit(
                 dt,
                 lookahead_distance,
                 goal_tolerance=goal_tolerance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=None,
             )
 
-            self._path = []
-
             self.allowed_move: bool = True
+            self._latest_pose: PoseStamped | None = None
 
-            # Publishers
             if not self._simulation:
-                self._publisher = self.create_publisher(
-                    Twist, "cmd_vel", 10)
+                self._publisher = self.create_publisher(Twist, "cmd_vel", 10)
             else:
-                self._publisher = self.create_publisher(
-                    TwistStamped, "cmd_vel", 10)
+                self._publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
 
-            # Subscribers
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
@@ -80,8 +74,8 @@ class PurePursuitNode(LifecycleNode):
                 durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
             )
             self._subscriber_path = self.create_subscription(
-                Path, "path", self._path_callback, qos_profile=path_qos_profile)
-
+                Path, "path", self._path_callback, qos_profile=path_qos_profile
+            )
             self._subscriber_allow_move = self.create_subscription(
                 AllowMove, "allow_move", self._allow_move_callback, 10
             )
@@ -100,56 +94,42 @@ class PurePursuitNode(LifecycleNode):
 
         """
         self.get_logger().info(
-            f"Transitioning from '{state.label}' to 'active' state.")
+            f"Transitioning from '{state.label}' to 'active' state."
+        )
 
         return super().on_activate(state)
 
     def _compute_commands_callback(self, pose_msg: PoseStamped):
-        """Subscriber callback. Executes a pure pursuit controller and publishes v and w commands.
+        """Executes pure pursuit and publishes commands once pose and path are ready."""
+        self._latest_pose = pose_msg
 
-        Starts to operate once the robot is localized.
+        if not pose_msg.localized or not self.allowed_move or not self._pure_pursuit.path:
+            return
 
-        Args:
-            pose_msg: Message containing the estimated robot pose.
+        x = pose_msg.pose.position.x
+        y = pose_msg.pose.position.y
+        quat_w = pose_msg.pose.orientation.w
+        quat_x = pose_msg.pose.orientation.x
+        quat_y = pose_msg.pose.orientation.y
+        quat_z = pose_msg.pose.orientation.z
+        _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
+        theta %= 2 * math.pi
 
-        """
-        if pose_msg.localized and self.allowed_move:
-            # Parse pose
-            x = pose_msg.pose.position.x
-            y = pose_msg.pose.position.y
-            quat_w = pose_msg.pose.orientation.w
-            quat_x = pose_msg.pose.orientation.x
-            quat_y = pose_msg.pose.orientation.y
-            quat_z = pose_msg.pose.orientation.z
-            _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
-            theta %= 2 * math.pi
-
-            # Execute pure pursuit
-            v, w = self._pure_pursuit.compute_commands(x, y, theta)
-            self.get_logger().info(
-                f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
-
-            # Publish
-            self._publish_velocity_commands(v, w)
+        v, w = self._pure_pursuit.compute_commands(x, y, theta)
+        self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+        self._publish_velocity_commands(v, w)
 
     def _path_callback(self, path_msg: Path):
-        """Subscriber callback. Saves the path the pure pursuit controller has to follow.
+        """Saves the path and immediately starts following it if localization already happened."""
+        self._pure_pursuit.path = [
+            (node.pose.position.x, node.pose.position.y) for node in path_msg.poses
+        ]
 
-        Args:
-            path_msg: Message containing the (smoothed) path.
-
-        """
-        # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        self._pure_pursuit.path = [(node.pose.position.x, node.pose.position.y) for node in path_msg.poses]
+        if self._latest_pose is not None and self._latest_pose.localized and self.allowed_move:
+            self._compute_commands_callback(self._latest_pose)
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:
-        """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
-
-        Args:
-            v: Linear velocity command [m/s].
-            w: Angular velocity command [rad/s].
-
-        """
+        """Publishes velocity commands."""
         if not self._simulation:
             msg = Twist()
             msg.linear.x = v
@@ -161,7 +141,6 @@ class PurePursuitNode(LifecycleNode):
             msg.twist.linear.x = v
             msg.twist.angular.z = w
             self._publisher.publish(msg)
-
 
     def _allow_move_callback(self, msg: AllowMove) -> None:
         self.allowed_move = msg.allowed
@@ -175,9 +154,12 @@ class PurePursuitNode(LifecycleNode):
         if not self.allowed_move and self._simulation:
             msg_twist = TwistStamped()
             msg_twist.header.stamp = self.get_clock().now().to_msg()
-            msg_twist.linear.x = 0.0
-            msg_twist.angular.z = 0.0
+            msg_twist.twist.linear.x = 0.0
+            msg_twist.twist.angular.z = 0.0
             self._publisher.publish(msg_twist)
+
+        if self.allowed_move and self._latest_pose is not None and self._latest_pose.localized and self._pure_pursuit.path:
+            self._compute_commands_callback(self._latest_pose)
 
 
 def main(args=None):
