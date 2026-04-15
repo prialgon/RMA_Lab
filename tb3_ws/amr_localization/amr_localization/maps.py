@@ -139,7 +139,7 @@ class Map:
                     if found:
                         intersections.append((xi.value, yi.value))
             else:
-                from amr_localization.intersect import Intersect
+                from amr_localization_cpp.intersect import Intersect
 
                 intersect = Intersect()
 

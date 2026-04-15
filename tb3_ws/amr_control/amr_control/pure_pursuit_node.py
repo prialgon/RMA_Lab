@@ -12,6 +12,8 @@ from transforms3d.euler import quat2euler
 from amr_control.pure_pursuit import PurePursuit
 
 
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 class PurePursuitNode(LifecycleNode):
     def __init__(self):
         """Pure pursuit node initializer."""
@@ -20,6 +22,7 @@ class PurePursuitNode(LifecycleNode):
         # Parameters
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("lookahead_distance", 0.2)
+        self.declare_parameter("goal_tolerance", 0.05)
         self.declare_parameter("simulation", False)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
@@ -39,6 +42,9 @@ class PurePursuitNode(LifecycleNode):
                 self.get_parameter(
                     "lookahead_distance").get_parameter_value().double_value
             )
+            goal_tolerance = (
+                self.get_parameter("goal_tolerance").get_parameter_value().double_value
+            )
             self._simulation = self.get_parameter(
                 "simulation").get_parameter_value().bool_value
 
@@ -46,6 +52,7 @@ class PurePursuitNode(LifecycleNode):
             self._pure_pursuit = PurePursuit(
                 dt,
                 lookahead_distance,
+                goal_tolerance=goal_tolerance,
                 simulation=self._simulation,
                 logger=None,  # Replace None with self.get_logger() to enable logging in the class
             )
@@ -66,8 +73,14 @@ class PurePursuitNode(LifecycleNode):
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
+            path_qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            )
             self._subscriber_path = self.create_subscription(
-                Path, "path", self._path_callback, 10)
+                Path, "path", self._path_callback, qos_profile=path_qos_profile)
 
             self._subscriber_allow_move = self.create_subscription(
                 AllowMove, "allow_move", self._allow_move_callback, 10
@@ -127,8 +140,7 @@ class PurePursuitNode(LifecycleNode):
 
         """
         # TODO: 4.8. Complete the function body with your code (i.e., replace the pass statement).
-        self._pure_pursuit.path = [
-            (node.pose.position.x, node.pose.position.y) for node in path_msg.poses]
+        self._pure_pursuit.path = [(node.pose.position.x, node.pose.position.y) for node in path_msg.poses]
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:
         """Publishes velocity commands in a geometry_msgs.msg.TwistStamped message.
@@ -150,11 +162,19 @@ class PurePursuitNode(LifecycleNode):
             msg.twist.angular.z = w
             self._publisher.publish(msg)
 
+
     def _allow_move_callback(self, msg: AllowMove) -> None:
         self.allowed_move = msg.allowed
 
-        if not self.allowed_move:
+        if not self.allowed_move and not self._simulation:
             msg_twist = Twist()
+            msg_twist.linear.x = 0.0
+            msg_twist.angular.z = 0.0
+            self._publisher.publish(msg_twist)
+
+        if not self.allowed_move and self._simulation:
+            msg_twist = TwistStamped()
+            msg_twist.header.stamp = self.get_clock().now().to_msg()
             msg_twist.linear.x = 0.0
             msg_twist.angular.z = 0.0
             self._publisher.publish(msg_twist)
