@@ -5,35 +5,53 @@ import math
 
 
 def generate_launch_description():
-    simulation = False
+    simulation = True
     world = "project"
     start = (-1.0, -1.0, math.radians(90))
     goal = (-0.6, 1.0)
 
-    particles = 100
-    global_localization = False
+    particles = 1000
+    global_localization = True
     start_sigma = (0.1, 0.1, math.radians(5))
     sigma_v = 0.05
     sigma_w = 0.1
-    sigma_z = 0.25
+    sigma_z = 0.2
 
-    particle_filter_node = LifecycleNode(
+    # particle_filter_node = LifecycleNode(
+    #     package="amr_localization",
+    #     executable="particle_filter",
+    #     name="particle_filter",
+    #     namespace="",
+    #     output="screen",
+    #     arguments=["--ros-args", "--log-level", "WARN"],
+    #     parameters=[
+    #         {
+    #             "enable_plot": False,
+    #             "global_localization": global_localization,
+    #             "initial_pose": start,
+    #             "initial_pose_sigma": start_sigma,
+    #             "particles": particles,
+    #             "sigma_v": sigma_v,
+    #             "sigma_w": sigma_w,
+    #             "sigma_z": sigma_z,
+    #             "simulation": simulation,
+    #             "world": world,
+    #         }
+    #     ],
+    # )
+
+    ekf_node = LifecycleNode(
         package="amr_localization",
-        executable="particle_filter",
-        name="particle_filter",
+        executable="ekf",
+        name="ekf",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
                 "enable_plot": False,
-                "global_localization": global_localization,
                 "initial_pose": start,
                 "initial_pose_sigma": start_sigma,
-                "particles": particles,
-                "sigma_v": sigma_v,
-                "sigma_w": sigma_w,
-                "sigma_z": sigma_z,
                 "simulation": simulation,
                 "world": world,
             }
@@ -49,11 +67,10 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "INFO"],
         parameters=[
             {
-                "connection_distance": 0.3,  # 0.3,
-                "enable_plot": True,
+                "connection_distance": 0.15,  # 0.3,
                 "goal": goal,
                 "grid_size": 0.1,
-                "node_count": 250,
+                "node_count": 500,
                 "obstacle_safety_distance": 0.12,  # 0.08,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
@@ -74,36 +91,27 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.25,
+                "lookahead_distance": 0.2,
                 "simulation": simulation,
             }
         ],
     )
 
-    # coppeliasim_node = LifecycleNode(
-    #     package="amr_simulation",
-    #     executable="coppeliasim",
-    #     name="coppeliasim",
-    #     namespace="",
-    #     output="screen",
-    #     arguments=["--ros-args", "--log-level", "WARN"],
-    #     parameters=[
-    #         {
-    #             "enable_localization": True,
-    #             "goal": goal,
-    #             "pose_tolerance": (0.1, 10.0),
-    #             "start": start,
-    #         }
-    #     ],
-    # )
-    
-    odometry_node = LifecycleNode(
-        package="amr_turtlebot3",
-        executable="odometry_node",
-        name="odometry",
+    coppeliasim_node = LifecycleNode(
+        package="amr_simulation",
+        executable="coppeliasim",
+        name="coppeliasim",
         namespace="",
         output="screen",
         arguments=["--ros-args", "--log-level", "WARN"],
+        parameters=[
+            {
+                "enable_localization": True,
+                "goal": goal,
+                "pose_tolerance": (0.1, 10.0),
+                "start": start,
+            }
+        ],
     )
 
     lifecycle_manager_node = Node(
@@ -114,11 +122,11 @@ def generate_launch_description():
         parameters=[
             {
                 "node_startup_order": (
-                    "particle_filter",
+                    # "particle_filter",
+                    "ekf",
                     "probabilistic_roadmap",
                     "pure_pursuit",
-                    "odometry"
-                    # "coppeliasim",  # Must be started last
+                    "coppeliasim",  # Must be started last
                 )
             }
         ],
@@ -126,11 +134,11 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            particle_filter_node,
+            # particle_filter_node,
+            ekf_node,
             probabilistic_roadmap_node,
             pure_pursuit_node,
-            # coppeliasim_node,
-            odometry_node,
+            coppeliasim_node,
             lifecycle_manager_node,  # Must be launched last
         ]
     )

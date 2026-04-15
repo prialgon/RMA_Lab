@@ -33,6 +33,8 @@ using Segment2D = std::array<Point2D, 2>;
 class ParticleFilterCore
 {
 public:
+    static constexpr int kMeasurementBeams = 16;
+
     ParticleFilterCore(
         double dt,
         const std::string &map_path,
@@ -51,7 +53,10 @@ public:
             {std::numeric_limits<double>::quiet_NaN(),
              std::numeric_limits<double>::quiet_NaN(),
              std::numeric_limits<double>::quiet_NaN()},
-        bool simulation = false)
+                bool simulation = false,
+                bool reset_on_low_likelihood = true,
+                double low_likelihood_log_threshold = -6.0,
+                int low_likelihood_patience = 3)
         : dt_(dt),
           initial_particle_count_(particle_count),
           particle_count_(particle_count),
@@ -62,7 +67,15 @@ public:
           sigma_z_(sigma_z),
           simulation_(simulation),
           iteration_(0),
-          n_prev_clusters_(particle_count)
+          n_prev_clusters_(particle_count),
+          reset_on_low_likelihood_(reset_on_low_likelihood),
+          low_likelihood_log_threshold_(low_likelihood_log_threshold),
+          low_likelihood_patience_(std::max(1, low_likelihood_patience)),
+          global_localization_(global_localization),
+          initial_pose_(initial_pose),
+          initial_pose_sigma_(initial_pose_sigma),
+          low_likelihood_streak_(0),
+          reset_happened_(false)
     {
 
         std::random_device rd;
@@ -134,20 +147,69 @@ public:
 
     void resample(const std::vector<float> &measurements)
     {
+        reset_happened_ = false;
+
         std::vector<double> weights;
+        std::vector<double> log_weights;
         weights.reserve(static_cast<size_t>(particles_.rows()));
+        log_weights.reserve(static_cast<size_t>(particles_.rows()));
+
+        double max_log_weight = -std::numeric_limits<double>::infinity();
 
         for (int i = 0; i < particles_.rows(); ++i)
         {
             std::array<double, 3> p{particles_(i, 0), particles_(i, 1), particles_(i, 2)};
-            weights.push_back(measurement_probability(measurements, p));
+            const double log_w = measurement_log_probability(measurements, p);
+            log_weights.push_back(log_w);
+            if (std::isfinite(log_w) && log_w > max_log_weight)
+            {
+                max_log_weight = log_w;
+            }
+        }
+
+        if (log_weights.empty())
+            return;
+
+        if (!std::isfinite(max_log_weight))
+        {
+            max_log_weight = 0.0;
+        }
+
+        for (double log_w : log_weights)
+        {
+            if (std::isfinite(log_w))
+            {
+                weights.push_back(std::exp(log_w - max_log_weight));
+            }
+            else
+            {
+                weights.push_back(0.0);
+            }
         }
 
         std::vector<double> bins(weights.size(), 0.0);
         std::partial_sum(weights.begin(), weights.end(), bins.begin());
 
-        if (weights.empty())
-            return;
+        if (reset_on_low_likelihood_)
+        {
+            const double best_log_likelihood_per_beam = max_log_weight / static_cast<double>(kMeasurementBeams);
+            if (best_log_likelihood_per_beam < low_likelihood_log_threshold_)
+            {
+                low_likelihood_streak_ += 1;
+            }
+            else
+            {
+                low_likelihood_streak_ = 0;
+            }
+
+            if (low_likelihood_streak_ >= low_likelihood_patience_)
+            {
+                reset_particles();
+                low_likelihood_streak_ = 0;
+                reset_happened_ = true;
+                return;
+            }
+        }
 
         double total_weight = bins.back();
         if (total_weight <= 0.0 || !std::isfinite(total_weight))
@@ -174,6 +236,13 @@ public:
         }
 
         particles_ = std::move(new_particles);
+    }
+
+    bool consume_reset_flag()
+    {
+        const bool reset = reset_happened_;
+        reset_happened_ = false;
+        return reset;
     }
 
     std::tuple<bool, std::tuple<double, double, double>> compute_pose()
@@ -544,14 +613,20 @@ private:
                std::exp(-((x - mu) * (x - mu)) / (2.0 * sigma * sigma));
     }
 
-    double measurement_probability(const std::vector<float> &measurements,
-                                   const std::array<double, 3> &particle) const
+    double gaussian_log_probability(double mu, double sigma, double x) const
     {
-        double probability = 1.0;
-        constexpr int n = 16;
+        const double s = std::max(sigma, 1e-9);
+        const double delta = x - mu;
+        return -std::log(std::sqrt(2.0 * M_PI) * s) - (delta * delta) / (2.0 * s * s);
+    }
+
+    double measurement_log_probability(const std::vector<float> &measurements,
+                                       const std::array<double, 3> &particle) const
+    {
+        double log_probability = 0.0;
 
         if (measurements.empty())
-            return probability;
+            return log_probability;
 
         std::vector<double> fixed_measurements;
         fixed_measurements.reserve(measurements.size());
@@ -577,15 +652,25 @@ private:
                 z = sensor_range_min_;
         }
 
-        const int step = std::max(1, static_cast<int>(fixed_measurements.size()) / n);
+        const int step = std::max(1, static_cast<int>(fixed_measurements.size()) / kMeasurementBeams);
 
-        for (int i = 0; i < n; ++i)
+        for (int i = 0; i < kMeasurementBeams; ++i)
         {
             const int idx = std::min(i * step, static_cast<int>(fixed_measurements.size()) - 1);
-            probability *= gaussian(z_hat[i], sigma_z_, fixed_measurements[idx]);
+            log_probability += gaussian_log_probability(z_hat[i], sigma_z_, fixed_measurements[idx]);
         }
 
-        return probability;
+        return log_probability;
+    }
+
+    void reset_particles()
+    {
+        particle_count_ = initial_particle_count_;
+        particles_ = init_particles(
+            initial_particle_count_,
+            global_localization_,
+            initial_pose_,
+            initial_pose_sigma_);
     }
 
 private:
@@ -600,6 +685,14 @@ private:
     bool simulation_;
     int iteration_;
     int n_prev_clusters_;
+    bool reset_on_low_likelihood_;
+    double low_likelihood_log_threshold_;
+    int low_likelihood_patience_;
+    bool global_localization_;
+    std::tuple<double, double, double> initial_pose_;
+    std::tuple<double, double, double> initial_pose_sigma_;
+    int low_likelihood_streak_;
+    bool reset_happened_;
 
     nb::object map_obj_;
     std::vector<Segment2D> map_segments_;
@@ -640,9 +733,13 @@ NB_MODULE(_pf_core, m)
                  std::numeric_limits<double>::quiet_NaN(),
                  std::numeric_limits<double>::quiet_NaN(),
                  std::numeric_limits<double>::quiet_NaN()),
-             "simulation"_a = false)
+             "simulation"_a = false,
+             "reset_on_low_likelihood"_a = true,
+             "low_likelihood_log_threshold"_a = -6.0,
+             "low_likelihood_patience"_a = 3)
         .def("move", &ParticleFilterCore::move)
         .def("resample", &ParticleFilterCore::resample)
         .def("compute_pose", &ParticleFilterCore::compute_pose)
+        .def("consume_reset_flag", &ParticleFilterCore::consume_reset_flag)
         .def("particles", &ParticleFilterCore::particles);
 }

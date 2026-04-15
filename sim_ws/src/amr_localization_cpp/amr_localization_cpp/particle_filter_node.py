@@ -42,6 +42,9 @@ class ParticleFilterNode(LifecycleNode):
         self.declare_parameter("world", "lab03")
         self.declare_parameter("particle_filter_pose_topic", "particle_filter/pose")
         self.declare_parameter("reset_topic", "particle_filter/reset")
+        self.declare_parameter("reset_on_low_likelihood", True)
+        self.declare_parameter("low_likelihood_log_threshold", -6.0)
+        self.declare_parameter("low_likelihood_patience", 3)
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
@@ -68,6 +71,15 @@ class ParticleFilterNode(LifecycleNode):
             self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
             world = self.get_parameter("world").get_parameter_value().string_value
             self._reset_topic = self.get_parameter("reset_topic").get_parameter_value().string_value
+            self._reset_on_low_likelihood = (
+                self.get_parameter("reset_on_low_likelihood").get_parameter_value().bool_value
+            )
+            self._low_likelihood_log_threshold = (
+                self.get_parameter("low_likelihood_log_threshold").get_parameter_value().double_value
+            )
+            self._low_likelihood_patience = (
+                self.get_parameter("low_likelihood_patience").get_parameter_value().integer_value
+            )
 
             self._localized = False
             self._localized_confirmed = False
@@ -189,6 +201,9 @@ class ParticleFilterNode(LifecycleNode):
             initial_pose=self.initial_pose,
             initial_pose_sigma=self._initial_pose_sigma,
             simulation=self._simulation,
+            reset_on_low_likelihood=self._reset_on_low_likelihood,
+            low_likelihood_log_threshold=self._low_likelihood_log_threshold,
+            low_likelihood_patience=self._low_likelihood_patience,
         )
 
     def _reset_localization_callback(self, _msg: Empty) -> None:
@@ -387,6 +402,15 @@ class ParticleFilterNode(LifecycleNode):
             self._particle_filter.resample(z_scan)
             sense_time = time.perf_counter() - start_time
             self.get_logger().info(f"Sense step time: {sense_time:6.3f} s")
+
+            if self._particle_filter.consume_reset_flag():
+                self.get_logger().warn(
+                    "Particle filter confidence too low for consecutive scans. "
+                    "Resetting particles from internal likelihood monitor."
+                )
+                self._localized = False
+                self._localized_confirmed = False
+                return pose
             
             # Plot after measurement/resample update
             self._show_particles(title="after resample", save_figure=True)

@@ -11,6 +11,9 @@ def generate_launch_description():
     goal = (-1.0, 0.6)
     localization_error_position_threshold = 0.50
     localization_error_angle_threshold = 30.0
+    reset_on_low_likelihood = True
+    low_likelihood_log_threshold = -6.0
+    low_likelihood_patience = 3
 
     particle_filter_node = LifecycleNode(
         package="amr_localization_cpp",
@@ -29,7 +32,10 @@ def generate_launch_description():
                 "sigma_z": 0.2,
                 "simulation": simulation,
                 "world": world,
-                "steps_btw_sense_updates": 10
+                "steps_btw_sense_updates": 10,
+                "reset_on_low_likelihood": reset_on_low_likelihood,
+                "low_likelihood_log_threshold": low_likelihood_log_threshold,
+                "low_likelihood_patience": low_likelihood_patience,
             }
         ],
     )
