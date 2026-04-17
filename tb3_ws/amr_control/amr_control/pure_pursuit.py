@@ -8,6 +8,7 @@ class PurePursuit:
         self,
         dt: float,
         lookahead_distance: float = 0.5,
+        goal_tolerance: float = 0.05,
         logger=None,
         simulation: bool = False,
     ):
@@ -16,6 +17,7 @@ class PurePursuit:
         Args:
             dt: Sampling period [s].
             lookahead_distance: Distance to the next target point [m].
+            goal_tolerance: Distance to the final path point considered reached [m].
             logger: Logger object to output messages with different severity levels.
             simulation: True if running in simulation, False if running on the real robot.
 
@@ -23,6 +25,7 @@ class PurePursuit:
         self._dt: float = dt
         self._logger = logger
         self._lookahead_distance: float = lookahead_distance
+        self._goal_tolerance: float = goal_tolerance
         self._path: list[tuple[float, float]] = []
         self._simulation: bool = simulation
 
@@ -40,10 +43,14 @@ class PurePursuit:
 
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-        v = 0.15
+        v = 0.16
         w = 0.0
 
         if len(self.path) == 0:
+            return 0.0, 0.0
+
+        dist_to_goal = math.dist((x, y), self.path[-1])
+        if dist_to_goal < self._goal_tolerance:
             return 0.0, 0.0
 
         current_point, current_idx = self._find_closest_point(x, y)
@@ -52,12 +59,18 @@ class PurePursuit:
         l: float = math.dist((x, y), target_point)
         beta: float = math.atan2((target_point[1] - y), (target_point[0] - x))
         alpha: float = beta - theta
-        w = 2 * v * math.sin(alpha) / l
+        
+        # Normalize alpha between -pi and pi
+        alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
 
-        if alpha > math.pi/3:
-            self._logger.warn("Houston houston")
+        if l > 1e-4:
+            w = 2 * v * math.sin(alpha) / l
+        else:
+            w = 0.0
+
+        if abs(alpha) > math.pi / 3:
             v = 0.0
-            w = 2.0
+            w = math.copysign(1.0, alpha)
 
         return v, w
 
@@ -115,8 +128,7 @@ class PurePursuit:
         candidates = []
         for node_idx in range(origin_idx, len(self.path)):
             if math.dist(self.path[node_idx], origin_xy) > self._lookahead_distance:
-                candidates.append(
-                    (self.path[node_idx], math.dist(self.path[node_idx], origin_xy)))
+                candidates.append((self.path[node_idx], math.dist(self.path[node_idx], origin_xy)))
 
         if len(candidates) == 0:
             target_xy = self.path[-1]

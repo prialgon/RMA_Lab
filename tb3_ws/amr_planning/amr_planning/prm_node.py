@@ -12,6 +12,8 @@ import traceback
 from amr_planning.prm import PRM
 
 
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 class PRMNode(LifecycleNode):
     def __init__(self):
         """Probabilistic roadmap (PRM) node initializer."""
@@ -92,10 +94,16 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
+            path_qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            )
             self.path_publisher = self.create_publisher(
                 Path,
                 "path",
-                qos_profile=10,
+                qos_profile=path_qos_profile,
             )
             
             # Subscribers

@@ -380,6 +380,7 @@ class WallFollower:
         return self._compute_commands_real(z_scan)
 
     def _compute_commands_sim(self, z_scan: list[float]) -> tuple[float, float]:
+        """Wall following exploration algorithm for simulation."""
         v: float = 0.0
         w: float = 0.0
 
@@ -437,7 +438,15 @@ class WallFollower:
             w = self.SIM_TURNAROUND_ANGULAR_VELOCITY
 
         self._prev_error = self._error(right[: self.SIM_SIDE_POINTS])
-        return self._apply_velocity_limits(v, w, v)
+
+        # Keep the simulation branch aligned with the original sim controller.
+        w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
+        w = float(np.clip(w, -w_max, w_max))
+
+        v_best: float = self.LINEAR_SPEED_MAX - (abs(w) * (self.TRACK / 2))
+        v = min(v, v_best)
+
+        return v, w
 
     def _compute_commands_real(self, z_scan: list[float]) -> tuple[float, float]:
         self.increment = 360 / len(z_scan) * np.pi / 180

@@ -42,7 +42,7 @@ class Map:
         self._map_polygon = Polygon(boundary, holes=holes)
 
         # Create a safe map by enlarging obstacles
-        self._safe_map_polygon = self._map_polygon.buffer(-safety_distance)
+        self._safe_map_polygon = self._map_polygon.buffer(-safety_distance, single_sided=True)
 
         # Create a segment map
         self._map_segments = []
@@ -139,7 +139,7 @@ class Map:
                     if found:
                         intersections.append((xi.value, yi.value))
             else:
-                from amr_localization.intersect import Intersect
+                from amr_planning.intersect import Intersect
 
                 intersect = Intersect()
 
