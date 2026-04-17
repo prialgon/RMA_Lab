@@ -1,0 +1,10 @@
+[0.080s] Invoking command in '/workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp/build/amr_localization_cpp': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp -DCMAKE_INSTALL_PREFIX=/workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp/install/amr_localization_cpp
+[0.323s] -- The C compiler identification is GNU 11.4.0
+[0.595s] -- The CXX compiler identification is GNU 11.4.0
+[0.648s] -- Detecting C compiler ABI info
+[1.119s] -- Detecting C compiler ABI info - done
+[1.145s] -- Check for working C compiler: /usr/bin/cc - skipped
+[1.146s] -- Detecting C compile features
+[1.147s] -- Detecting C compile features - done
+[1.200s] -- Detecting CXX compiler ABI info
+[1.641s] Invoked command in '/workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp/build/amr_localization_cpp' returned '-2': CMAKE_PREFIX_PATH=/opt/ros/humble /usr/bin/cmake /workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp -DCMAKE_INSTALL_PREFIX=/workspaces/RMA_Lab/sim_ws/src/amr_localization_cpp/install/amr_localization_cpp

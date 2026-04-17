@@ -89,7 +89,7 @@ class CoppeliaSim:
                     math.sin(real_orientation[2] - theta), math.cos(real_orientation[2] - theta)
                 )
             )
-            if theta
+            if theta is not None
             else None
         )
         real_pose = (real_position[0], real_position[1], real_orientation[2])

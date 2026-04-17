@@ -4,6 +4,7 @@ from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReli
 
 import message_filters
 from amr_msgs.msg import PoseStamped
+from std_msgs.msg import Empty
 from geometry_msgs.msg import TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -30,6 +31,9 @@ class CoppeliaSimNode(LifecycleNode):
             (0.1, 10.0),
         )
         self.declare_parameter("start", (0.0, 0.0, 0.0))
+        self.declare_parameter("localization_error_position_threshold", 0.25)
+        self.declare_parameter("localization_error_angle_threshold", 20.0)
+        self.declare_parameter("reset_topic", "particle_filter/reset")
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -61,11 +65,19 @@ class CoppeliaSimNode(LifecycleNode):
                 self.get_parameter("start").get_parameter_value(
                 ).double_array_value.tolist()
             )
+            self._localization_error_position_threshold = self.get_parameter(
+                "localization_error_position_threshold"
+            ).get_parameter_value().double_value
+            self._localization_error_angle_threshold = self.get_parameter(
+                "localization_error_angle_threshold"
+            ).get_parameter_value().double_value
+            self._reset_topic = self.get_parameter("reset_topic").get_parameter_value().string_value
 
             # Attribute and object initializations
             self._coppeliasim = CoppeliaSim(dt, start, pose_tolerance)
             self._robot = TurtleBot3Burger(self._coppeliasim.sim, dt)
             self._localized = False
+            self._reset_requested = False
 
             # Publishers
             # TODO: 2.4. Create the /odometry (Odometry message) and /scan (LaserScan) publishers.
@@ -76,6 +88,7 @@ class CoppeliaSimNode(LifecycleNode):
             self._publisher_scan = self.create_publisher(
                 msg_type=LaserScan, topic="scan", qos_profile=qos_profile_sensor_data
             )
+            self._reset_publisher = self.create_publisher(Empty, self._reset_topic, 10)
 
             # Subscribers
             # TODO: 2.12. Subscribe to /cmd_vel. Connect it with with _next_step_callback.
@@ -188,6 +201,8 @@ class CoppeliaSimNode(LifecycleNode):
 
         """
         self._localized = pose_msg.localized
+        if not self._localized:
+            self._reset_requested = False
 
         if self._localized:
             x_h = pose_msg.pose.position.x
@@ -225,6 +240,17 @@ class CoppeliaSimNode(LifecycleNode):
                 f"{position_error:.3f} m, {angle_error:.1f}º",
                 skip_first=True,  # Log all but the first time this function is hit
             )
+
+            if (
+                not self._reset_requested
+                and (position_error > self._localization_error_position_threshold
+                    or abs(angle_error) > self._localization_error_angle_threshold)
+            ):
+                self._reset_requested = True
+                self._localized = False
+                self.get_logger().warn("Localization error too large. Requesting particle filter restart.")
+                self._reset_publisher.publish(Empty())
+
 
     def _check_goal(self) -> bool:
         """Checks whether the robot is localized and has reached the goal within tolerance or not.

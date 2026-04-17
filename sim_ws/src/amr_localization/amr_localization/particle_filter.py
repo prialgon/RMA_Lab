@@ -178,7 +178,7 @@ class ParticleFilter:
         bins = np.cumsum(weights)
         
         W: float = np.sum(weights)
-        self._logger.warn(f"W: {W}; Count: {self._particle_count}")
+        # self._logger.warn(f"W: {W}; Count: {self._particle_count}")
         u_0: float = np.random.uniform(low=0, high=W/self._particle_count)
         
         u = u_0 + np.arange(self._particle_count) * W/self._particle_count

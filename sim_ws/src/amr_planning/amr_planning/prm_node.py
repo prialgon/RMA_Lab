@@ -12,6 +12,8 @@ import traceback
 from amr_planning.prm import PRM
 
 
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 class PRMNode(LifecycleNode):
     def __init__(self):
         """Probabilistic roadmap (PRM) node initializer."""
@@ -84,7 +86,7 @@ class PRMNode(LifecycleNode):
                 grid_size,
                 connection_distance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
             )
             roadmap_creation_time = time.perf_counter() - start_time
 
@@ -92,6 +94,17 @@ class PRMNode(LifecycleNode):
 
             # Publishers
             # TODO: 4.6. Create the /path publisher (Path message).
+            path_qos_profile = QoSProfile(
+                history=QoSHistoryPolicy.KEEP_LAST,
+                depth=1,
+                reliability=QoSReliabilityPolicy.RELIABLE,
+                durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+            )
+            self.path_publisher = self.create_publisher(
+                Path,
+                "path",
+                qos_profile=path_qos_profile,
+            )
             
             # Subscribers
             self._subscriber_pose = self.create_subscription(
@@ -122,6 +135,7 @@ class PRMNode(LifecycleNode):
             pose_msg: Message containing the robot pose estimate.
 
         """
+        # self.get_logger().warn(str(self._localized))
         if pose_msg.localized and not self._localized:
             start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
 
@@ -157,7 +171,17 @@ class PRMNode(LifecycleNode):
 
         """
         # TODO: 4.7. Complete the function body with your code (i.e., replace the pass statement).
-        pass
+        msg: Path = Path()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        path_list = []
+        for node in path:
+            node_msg = PoseStamped()
+            node_msg.pose.position.x = node[0]
+            node_msg.pose.position.y = node[1]
+            path_list.append(node_msg)
+        
+        msg.poses = path_list
+        self.path_publisher.publish(msg)
         
 
 def main(args=None):
