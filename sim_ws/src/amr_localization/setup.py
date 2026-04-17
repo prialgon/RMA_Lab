@@ -20,7 +20,6 @@ setup(
     entry_points={
         "console_scripts": [
             "particle_filter = amr_localization.particle_filter_node:main",
-            "ekf = amr_localization.ekf_node:main"
         ],
     },
 )

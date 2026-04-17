@@ -1,5 +1,4 @@
 import datetime
-import math
 import numpy as np
 import os
 import pytz
@@ -61,7 +60,6 @@ class PRM:
         )
 
         self._logger = logger
-
         self._simulation: bool = simulation
 
         self._figure, self._axes = plt.subplots(1, 1, figsize=(7, 7))
@@ -83,7 +81,6 @@ class PRM:
 
         """
         # Check if the goal is valid
-
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
 
@@ -92,51 +89,8 @@ class PRM:
         # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
 
-        closest_start = list(self._graph.keys())[0]
-        closest_goal = list(self._graph.keys())[0]
-
-        for node in self._graph.keys():
-            if math.dist(node, start) < math.dist(closest_start, start):
-                closest_start = node
-
-            if math.dist(node, goal) < math.dist(closest_goal, goal):
-                closest_goal = node
-
-        def h(x, y) -> float:
-            return math.dist(x, y)  # Calculates the heuristic
-
-        def cost(x, y) -> float:
-            return math.dist(x, y)  # Calculates the cost
-
-        open_list = {closest_start: (h(closest_start, closest_goal), 0)}
-        closed_list = set()
-
-        while len(open_list) > 0:
-            current_node = min(open_list, key=lambda x: open_list.get(x)[0])
-            f, g = open_list[current_node]
-            open_list.pop(current_node)
-            closed_list.add(current_node)
-
-            if current_node == closest_goal:
-                if closest_start not in ancestors:
-                    ancestors[closest_start] = start
-                if goal not in ancestors:
-                    ancestors[goal] = closest_goal
-                return self._reconstruct_path(start, goal, ancestors)
-
-            for neighbour in self._graph[current_node]:
-                if neighbour in closed_list:
-                    continue
-
-                g_new = g + cost(current_node, neighbour)
-                f_new = g_new + h(neighbour, closest_goal)
-
-                if neighbour not in open_list or g_new < open_list[neighbour][1]:
-                    open_list[neighbour] = (f_new, g_new)
-                    ancestors[neighbour] = current_node
-
-        raise ValueError("Path cannot be reconstructed.")
-
+        return path
+        
     @staticmethod
     def smooth_path(
         path: list[tuple[float, float]],
@@ -161,49 +115,7 @@ class PRM:
         """
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
         smoothed_path: list[tuple[float, float]] = []
-
-        # Add smoothed points to path
-        for idx, node in enumerate(path):
-            smoothed_path.append(node)
-            if node != path[-1]:
-                increment_x: float = (path[idx + 1][0] - node[0]) / (
-                    additional_smoothing_points + 1
-                )
-                increment_y: float = (path[idx + 1][1] - node[1]) / (
-                    additional_smoothing_points + 1
-                )
-                for i in range(1, additional_smoothing_points + 1):
-                    smoothed_path.append((node[0] + increment_x * i, node[1] + increment_y * i))
-
-        path_copy = smoothed_path.copy()
-
-        # Gradient descent
-        change_x_total: float = np.inf
-        change_y_total: float = np.inf
-        while (change_x_total + change_y_total) >= tolerance:
-            change_x_total: float = 0.0
-            change_y_total: float = 0.0
-            for idx, node in enumerate(smoothed_path):
-                if node == path[0] or node == path[-1]:
-                    continue
-                s_x = (
-                    node[0]
-                    + data_weight * (path_copy[idx][0] - node[0])
-                    + smooth_weight
-                    * (smoothed_path[idx + 1][0] + smoothed_path[idx - 1][0] - 2 * node[0])
-                )
-                s_y = (
-                    node[1]
-                    + data_weight * (path_copy[idx][1] - node[1])
-                    + smooth_weight
-                    * (smoothed_path[idx + 1][1] + smoothed_path[idx - 1][1] - 2 * node[1])
-                )
-
-                smoothed_path[idx] = (s_x, s_y)
-
-                change_x_total += abs(s_x - node[0])
-                change_y_total += abs(s_y - node[1])
-
+        
         return smoothed_path
 
     def plot(
@@ -326,16 +238,7 @@ class PRM:
 
         """
         # TODO: 4.2. Complete the missing function body with your code.
-        nodes = list(graph.keys())
-        for i in range(len(nodes)):
-            for j in range(i + 1, len(nodes)):
-                node1 = nodes[i]
-                node2 = nodes[j]
-
-                if math.dist(node1, node2) <= connection_distance:
-                    if not self._map.crosses([node1, node2]):
-                        graph[node1].append(node2)
-                        graph[node2].append(node1)
+        
         return graph
 
     def _create_graph(
@@ -381,29 +284,7 @@ class PRM:
         graph: dict[tuple[float, float], list[tuple[float, float]]] = {}
 
         # TODO: 4.1. Complete the missing function body with your code.
-        x_min, y_min, x_max, y_max = self._map.bounds()
-
-        if not use_grid:
-            nodes = []
-            while len(nodes) < node_count:
-                random_node = tuple(np.random.uniform((x_min, y_min), (x_max, y_max)).round(3))
-                if self._map.contains(random_node) and (random_node not in nodes):
-                    nodes.append(random_node)
-        else:
-            row_nodes: int = int((x_max - x_min) / grid_size)
-            column_nodes: int = int((y_max - y_min) / grid_size)
-            nodes = []
-            for i in range(row_nodes + 1):
-                for j in range(column_nodes + 1):
-                    x_value: float = np.round(x_min + i * grid_size, 3)
-                    y_value: float = np.round(y_min + j * grid_size, 3)
-                    node = (x_value, y_value)
-                    if self._map.contains(node):
-                        nodes.append(node)
-
-        for node in nodes:
-            graph[node] = []
-
+        
         return graph
 
     def _reconstruct_path(
@@ -426,13 +307,8 @@ class PRM:
         path: list[tuple[float, float]] = []
 
         # TODO: 4.4. Complete the missing function body with your code.
-        path.append(goal)
-        current_node = goal
-        while current_node != start:
-            path.append(ancestors[current_node])
-            current_node = ancestors[current_node]
-
-        return path[::-1]
+        
+        return path
 
 
 if __name__ == "__main__":
@@ -443,7 +319,7 @@ if __name__ == "__main__":
 
     # Create the roadmap
     start_time = time.perf_counter()
-    prm = PRM(map_path, use_grid=True, node_count=750, grid_size=0.1, connection_distance=0.15)
+    prm = PRM(map_path, use_grid=True, node_count=250, grid_size=0.1, connection_distance=0.15)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")

@@ -12,6 +12,3 @@ __pycache__/
 
 # Generated images
 sim_ws/src/amr_localization/images/
-tb3_ws/amr_localization/images
-tb3_ws/amr_planning/images
-sim_ws/src/amr_planning/images
