@@ -136,8 +136,9 @@ class WallFollowerNode(LifecycleNode):
 
     def _pose_callback(self, pose_msg: PoseStamped):
         self.pose_msg = pose_msg
-
+        
         if pose_msg.localized and not self._localized_stopped:
+            
             self._localized_stopped = True
             if self.allowed_move:
                 self._publish_velocity_commands(0.0, 0.0)

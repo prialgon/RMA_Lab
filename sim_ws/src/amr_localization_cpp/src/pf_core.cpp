@@ -192,8 +192,13 @@ public:
 
         if (reset_on_low_likelihood_)
         {
-            const double best_log_likelihood_per_beam = max_log_weight / static_cast<double>(kMeasurementBeams);
-            if (best_log_likelihood_per_beam < low_likelihood_log_threshold_)
+            // Convert the best particle score into a relative score by
+            // accounting for the number of particles (log-domain normalization).
+            const double relative_log_likelihood_per_beam =
+                (max_log_weight - std::log(static_cast<double>(std::max(1, particle_count_)))) /
+                static_cast<double>(kMeasurementBeams);
+
+            if (relative_log_likelihood_per_beam < low_likelihood_log_threshold_)
             {
                 low_likelihood_streak_ += 1;
             }
@@ -668,7 +673,7 @@ private:
         particle_count_ = initial_particle_count_;
         particles_ = init_particles(
             initial_particle_count_,
-            global_localization_,
+            true,
             initial_pose_,
             initial_pose_sigma_);
     }
@@ -715,7 +720,10 @@ NB_MODULE(_pf_core, m)
                  bool,
                  std::tuple<double, double, double>,
                  std::tuple<double, double, double>,
-                 bool>(),
+                 bool,
+                 bool,
+                 double,
+                 int>(),
              "dt"_a,
              "map_path"_a,
              "particle_count"_a,

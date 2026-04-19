@@ -160,7 +160,7 @@ class PRMNode(LifecycleNode):
                 self._planning.show(path=path, smoothed_path=smoothed_path, save_figure=True)
 
             self._publish_path(smoothed_path)
-
+        
         self._localized = pose_msg.localized
 
     def _publish_path(self, path: list[tuple[float, float]]) -> None:

@@ -296,7 +296,7 @@ class WallFollower:
             if self._left_allowed:
                 return States.LEFT
 
-        raise Exception("NO NEW STATE")
+        return States.TURNAROUND
 
     def _get_new_state_real(
         self,
