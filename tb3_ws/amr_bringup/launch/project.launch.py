@@ -30,10 +30,10 @@ def generate_launch_description():
                 "particles": 3000,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
-                "sigma_z": 0.25, 
+                "sigma_z": 0.25,
                 "simulation": simulation,
                 "world": world,
-                "steps_btw_sense_updates": 15, # 20
+                "steps_btw_sense_updates": 15,  # 20
                 "reset_on_low_likelihood": reset_on_low_likelihood,
                 "low_likelihood_log_threshold": low_likelihood_log_threshold,
                 "low_likelihood_patience": low_likelihood_patience,
@@ -75,8 +75,8 @@ def generate_launch_description():
                 "obstacle_safety_distance": 0.15,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
-                "smoothing_data_weight": 0.1,
-                "smoothing_smooth_weight": 0.25,
+                "smoothing_data_weight": 0.25,
+                "smoothing_smooth_weight": 0.15,
                 "use_grid": True,
                 "world": world,
             }
