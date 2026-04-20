@@ -43,7 +43,7 @@ class PurePursuit:
 
         """
         # TODO: 4.11. Complete the function body with your code (i.e., compute v and w).
-        v = 0.16
+        v = 0.08
         w = 0.0
 
         if len(self.path) == 0:
@@ -68,9 +68,9 @@ class PurePursuit:
         else:
             w = 0.0
 
-        if abs(alpha) > math.pi / 3:
+        if abs(alpha) > math.pi / 4:
             v = 0.0
-            w = math.copysign(1.0, alpha)
+            w = math.copysign(1.8, alpha)
 
         return v, w
 
@@ -123,16 +123,57 @@ class PurePursuit:
 
         """
         # TODO: 4.10. Complete the function body with your code (i.e., determine target_xy).
-        target_xy = None
+        # target_xy = None
 
-        candidates = []
-        for node_idx in range(origin_idx, len(self.path)):
-            if math.dist(self.path[node_idx], origin_xy) > self._lookahead_distance:
-                candidates.append((self.path[node_idx], math.dist(self.path[node_idx], origin_xy)))
+        # candidates = []
+        # for node_idx in range(origin_idx, len(self.path)):
+        #     if math.dist(self.path[node_idx], origin_xy) > self._lookahead_distance:
+        #         candidates.append((self.path[node_idx], math.dist(self.path[node_idx], origin_xy)))
 
-        if len(candidates) == 0:
-            target_xy = self.path[-1]
-        else:
-            target_xy = min(candidates, key=lambda x: x[1])[0]
+        # if len(candidates) == 0:
+        #     target_xy = self.path[-1]
+        # else:
+        #     target_xy = min(candidates, key=lambda x: x[1])[0]
 
-        return target_xy
+        # return target_xy
+        
+        if len(self.path) < 2:
+            return self.path[-1] if self.path else origin_xy
+
+        L = self._lookahead_distance
+        x_r, y_r = origin_xy
+
+        for i in range(origin_idx, len(self.path) - 1):
+            x1, y1 = self.path[i]
+            x2, y2 = self.path[i + 1]
+
+            # Parametrize the segment as P(t) = P1 + t * (P2 - P1), t in [0, 1].
+            # Solve |P(t) - robot|^2 = L^2 -> quadratic a*t^2 + b*t + c = 0.
+            dx = x2 - x1
+            dy = y2 - y1
+            fx = x1 - x_r
+            fy = y1 - y_r
+
+            a = dx * dx + dy * dy
+            b = 2.0 * (fx * dx + fy * dy)
+            c = fx * fx + fy * fy - L * L
+
+            # Degenerate segment or no real intersection with this segment.
+            if a < 1e-12:
+                continue
+            disc = b * b - 4.0 * a * c
+            if disc < 0.0:
+                continue
+
+            sqrt_disc = math.sqrt(disc)
+            t1 = (-b - sqrt_disc) / (2.0 * a)
+            t2 = (-b + sqrt_disc) / (2.0 * a)
+
+            # Prefer the exit intersection (largest t in [0, 1]): that is the
+            # point where the path leaves the lookahead circle moving forward.
+            for t in (t2, t1):
+                if 0.0 <= t <= 1.0:
+                    return (x1 + t * dx, y1 + t * dy)
+
+        # No segment intersects the lookahead circle: aim at the final goal.
+        return self.path[-1]

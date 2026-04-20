@@ -13,8 +13,8 @@ def generate_launch_description():
     localization_error_angle_threshold = 30.0
 
     reset_on_low_likelihood = True
-    low_likelihood_log_threshold = -1.0
-    low_likelihood_patience = 2
+    low_likelihood_log_threshold = -0.75
+    low_likelihood_patience = 3
 
     particle_filter_node = LifecycleNode(
         package="amr_localization_cpp",
@@ -30,10 +30,10 @@ def generate_launch_description():
                 "particles": 3000,
                 "sigma_v": 0.05,
                 "sigma_w": 0.1,
-                "sigma_z": 0.3,
+                "sigma_z": 0.25, 
                 "simulation": simulation,
                 "world": world,
-                "steps_btw_sense_updates": 20,
+                "steps_btw_sense_updates": 15, # 20
                 "reset_on_low_likelihood": reset_on_low_likelihood,
                 "low_likelihood_log_threshold": low_likelihood_log_threshold,
                 "low_likelihood_patience": low_likelihood_patience,
@@ -70,9 +70,9 @@ def generate_launch_description():
                 "connection_distance": 0.3,
                 "enable_plot": True,
                 "goal": goal,
-                "grid_size": 0.08,
+                "grid_size": 0.1,
                 "node_count": 500,
-                "obstacle_safety_distance": 0.13,
+                "obstacle_safety_distance": 0.15,
                 "simulation": simulation,
                 "smoothing_additional_points": 3,
                 "smoothing_data_weight": 0.1,
@@ -107,8 +107,8 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "lookahead_distance": 0.17,
-                "goal_tolerance": 0.01,
+                "lookahead_distance": 0.1,
+                "goal_tolerance": 0.05,
                 "simulation": simulation,
             }
         ],

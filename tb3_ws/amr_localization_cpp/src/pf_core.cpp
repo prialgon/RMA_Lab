@@ -319,38 +319,14 @@ public:
         {
             pose = mean_pose_of_cluster(valid_labels[0]);
 
-            if (particles_.rows() > 50)
-            {
-                Eigen::MatrixXd new_particles(50, 3);
-                int count = 0;
-                for (int i = 0; i < n && count < 50; ++i)
-                {
-                    if (labels[i] == valid_labels[0])
-                    {
-                        new_particles.row(count++) = particles_.row(i);
-                    }
-                }
-                while (count > 0 && count < 50)
-                {
-                    new_particles.row(count) = new_particles.row(count % count);
-                    count++;
-                }
-                if (count == 0) // Should not happen if there is a cluster
-                {
-                    for (int i = 0; i < 50; ++i)
-                        new_particles.row(i) = particles_.row(0);
-                }
-                particles_ = new_particles;
-            }
-
             localized = true;
-            particle_count_ = 50;
+            particle_count_ = 100;
         }
         else
         {
             if (static_cast<int>(valid_labels.size()) < n_prev_clusters_)
             {
-                particle_count_ = std::max(50, static_cast<int>(particle_count_ * 0.8));
+                particle_count_ = std::max(100, static_cast<int>(valid_labels.size() * 200));
             }
 
             std::unordered_map<int, int> counts;
