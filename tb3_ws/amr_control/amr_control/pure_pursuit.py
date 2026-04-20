@@ -59,8 +59,8 @@ class PurePursuit:
         l: float = math.dist((x, y), target_point)
         beta: float = math.atan2((target_point[1] - y), (target_point[0] - x))
         alpha: float = beta - theta
-        
-        # Normalize alpha between -pi and pi
+
+        # Wrap alpha to [-pi, pi].
         alpha = (alpha + math.pi) % (2 * math.pi) - math.pi
 
         if l > 1e-4:
@@ -136,7 +136,7 @@ class PurePursuit:
         #     target_xy = min(candidates, key=lambda x: x[1])[0]
 
         # return target_xy
-        
+
         if len(self.path) < 2:
             return self.path[-1] if self.path else origin_xy
 

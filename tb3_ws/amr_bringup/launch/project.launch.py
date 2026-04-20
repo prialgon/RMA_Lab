@@ -115,7 +115,6 @@ def generate_launch_description():
     )
 
     if simulation:
-
         coppeliasim_node = LifecycleNode(
             package="amr_simulation",
             executable="coppeliasim",
@@ -147,7 +146,7 @@ def generate_launch_description():
                         "probabilistic_roadmap",
                         "wall_follower",
                         "pure_pursuit",
-                        "coppeliasim",  # Must be started last
+                        "coppeliasim",  # Must be started last.
                     )
                 }
             ],
@@ -160,7 +159,7 @@ def generate_launch_description():
                 wall_follower_node,
                 pure_pursuit_node,
                 coppeliasim_node,
-                lifecycle_manager_node,  # Must be launched last
+                lifecycle_manager_node,  # Must be launched last.
             ]
         )
 
@@ -201,7 +200,7 @@ def generate_launch_description():
                         "wall_follower",
                         "pure_pursuit",
                         "odometry",
-                        "monitoring",  # Must be started last
+                        "monitoring",  # Must be started last.
                     )
                 }
             ],
@@ -215,6 +214,6 @@ def generate_launch_description():
                 pure_pursuit_node,
                 odometry_node,
                 monitoring_node,
-                lifecycle_manager_node,  # Must be launched last
+                lifecycle_manager_node,  # Must be launched last.
             ]
         )

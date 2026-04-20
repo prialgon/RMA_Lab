@@ -485,7 +485,7 @@ class WallFollower:
             np.median(forward_left),
             np.median(forward_right),
         )
-        
+
         if self._current_state == States.FORWARD:
             if not self._forward_turning:
                 v = self.REAL_FORWARD_LINEAR_VELOCITY

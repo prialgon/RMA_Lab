@@ -14,7 +14,7 @@ class MonitoringNode(LifecycleNode):
         """Monitoring node initializer."""
         super().__init__("monitoring")
 
-        # Parameters
+        # Parameters.
         self.declare_parameter("goal", (float("inf"), float("inf")))
         self.declare_parameter("goal_tolerance", 0.15)
 
@@ -28,7 +28,7 @@ class MonitoringNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
+            # Parameters.
             self._goal = tuple(
                 self.get_parameter("goal").get_parameter_value().double_array_value.tolist()
             )
@@ -36,11 +36,11 @@ class MonitoringNode(LifecycleNode):
                 self.get_parameter("goal_tolerance").get_parameter_value().double_value
             )
 
-            # Attribute and object initializations
+            # Attributes and objects.
             self._localized = False
             self._start_time: float = time.time()
 
-            # Subscribers
+            # Subscribers.
             self._localization_subscriber = self.create_subscription(
                 PoseStamped, "pose", self._check_pose_callback, 10
             )
@@ -81,14 +81,14 @@ class MonitoringNode(LifecycleNode):
             th_h %= 2 * math.pi
             th_h_deg = math.degrees(th_h)
 
-            # Print the pose in which the robot localized
+            # First localization log.
             if not self._localized:
                 self.get_logger().warn(
                     f"Localized at x = {x_h:.2f} m, y = {y_h:.2f} m, "
                     f"theta = {th_h:.2f} rad ({th_h_deg:.1f}º)"
                 )
 
-            # Check if the estimated pose is within tolerance of the goal
+            # Goal check.
             position_error = math.dist((self._goal[0], self._goal[1]), (x_h, y_h))
 
             if position_error <= self._goal_tolerance:
@@ -98,7 +98,7 @@ class MonitoringNode(LifecycleNode):
                     f"Congratulations, you reached the goal in {execution_time:.3f} s! | "
                     f"Estimated pose: x = {x_h:.2f} m, y = {y_h:.2f} m, "
                     f"theta = {th_h:.2f} rad ({th_h_deg:.1f}º)",
-                    once=True,  # Log only the first time this function is hit
+                    once=True,
                 )
 
         self._localized = pose_msg.localized
