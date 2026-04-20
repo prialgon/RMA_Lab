@@ -7,8 +7,9 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (0.1, 0.87, math.radians(180))
-    goal = (-0.6, 1.0)
+    start = (-1.0
+             , 0.6, math.radians(180))
+    goal = (0.2, -0.6)
     reset_on_low_likelihood = True
     low_likelihood_log_threshold = -0.75
     low_likelihood_patience = 3
@@ -22,7 +23,7 @@ def generate_launch_description():
         arguments=["--ros-args", "--log-level", "WARN"],
         parameters=[
             {
-                "enable_plot": True,
+                "enable_plot": False,
                 "global_localization": True,
                 "particles": 3000,
                 "sigma_v": 0.05,
