@@ -6,7 +6,7 @@ import pytz
 import random
 import time
 
-# This try-except enables local debugging of the PRM class
+# Allow running this module standalone for local debugging.
 try:
     from amr_planning.maps import Map
 except ImportError:
@@ -82,12 +82,11 @@ class PRM:
             Path to the destination. The first value corresponds to the initial location.
 
         """
-        # Check if the goal is valid
-
         if not self._map.contains(goal):
             raise ValueError("Goal location is outside the environment.")
 
-        ancestors: dict[tuple[float, float], tuple[float, float]] = {}  # {(x, y: (x_prev, y_prev)}
+        # Maps each node to its predecessor along the best path found so far.
+        ancestors: dict[tuple[float, float], tuple[float, float]] = {}
 
         # TODO: 4.3. Complete the function body (i.e., replace the code below).
         path: list[tuple[float, float]] = []
@@ -103,10 +102,10 @@ class PRM:
                 closest_goal = node
 
         def h(x, y) -> float:
-            return math.dist(x, y)  # Calculates the heuristic
+            return math.dist(x, y)
 
         def cost(x, y) -> float:
-            return math.dist(x, y)  # Calculates the cost
+            return math.dist(x, y)
 
         open_list = {closest_start: (h(closest_start, closest_goal), 0)}
         closed_list = set()
@@ -162,7 +161,7 @@ class PRM:
         # TODO: 4.5. Complete the function body (i.e., load smoothed_path).
         smoothed_path: list[tuple[float, float]] = []
 
-        # Add smoothed points to path
+        # Insert intermediate points between consecutive nodes.
         for idx, node in enumerate(path):
             smoothed_path.append(node)
             if node != path[-1]:
@@ -212,7 +211,7 @@ class PRM:
         path: list[tuple[float, float]] = (),
         smoothed_path: list[tuple[float, float]] = (),
     ):
-        """Draws particles.
+        """Draws the roadmap and optionally a path over it.
 
         Args:
             axes: Figure axes.
@@ -223,11 +222,11 @@ class PRM:
             axes: Modified axes.
 
         """
-        # Plot the nodes
+        # Nodes.
         x, y = zip(*self._graph.keys())
         axes.plot(list(x), list(y), "co", markersize=1)
 
-        # Plot the edges
+        # Edges.
         for node, neighbors in self._graph.items():
             x_start, y_start = node
 
@@ -235,29 +234,26 @@ class PRM:
                 for x_end, y_end in neighbors:
                     axes.plot([x_start, x_end], [y_start, y_end], "c-", linewidth=0.25)
 
-        # Plot the path
+        # Raw path.
         if path:
             x_val = [x[0] for x in path]
             y_val = [x[1] for x in path]
 
-            axes.plot(x_val, y_val)  # Plot the path
-            axes.plot(x_val[1:-1], y_val[1:-1], "bo", markersize=4)  # Draw nodes as blue circles
+            axes.plot(x_val, y_val)
+            axes.plot(x_val[1:-1], y_val[1:-1], "bo", markersize=4)
 
-        # Plot the smoothed path
+        # Smoothed path.
         if smoothed_path:
             x_val = [x[0] for x in smoothed_path]
             y_val = [x[1] for x in smoothed_path]
 
-            axes.plot(x_val, y_val, "y")  # Plot the path
-            axes.plot(x_val[1:-1], y_val[1:-1], "yo", markersize=2)  # Draw nodes as yellow circles
+            axes.plot(x_val, y_val, "y")
+            axes.plot(x_val[1:-1], y_val[1:-1], "yo", markersize=2)
 
         if path or smoothed_path:
-            axes.plot(
-                x_val[0], y_val[0], "rs", markersize=7
-            )  # Draw a red square at the start location
-            axes.plot(
-                x_val[-1], y_val[-1], "g*", markersize=12
-            )  # Draw a green star at the goal location
+            # Red square at start, green star at goal.
+            axes.plot(x_val[0], y_val[0], "rs", markersize=7)
+            axes.plot(x_val[-1], y_val[-1], "g*", markersize=12)
 
         return axes
 
@@ -271,16 +267,15 @@ class PRM:
         save_figure: bool = False,
         save_dir: str = "images",
     ):
-        """Displays the current particle set on the map.
+        """Displays the roadmap and optional paths on the map.
 
         Args:
             title: Plot title.
             path: Path (start location first).
             smoothed_path: Smoothed path (start location first).
-            display: True to open a window to visualize the particle filter evolution in real-time.
-                Time consuming. Does not work inside a container unless the screen is forwarded.
-            block: True to stop program execution until the figure window is closed.
-            save_figure: True to save figure to a .png file.
+            display: Open a window to visualize the roadmap in real time.
+            block: Stop program execution until the window is closed.
+            save_figure: Save the figure to a .png file.
             save_dir: Image save directory.
 
         """
@@ -292,11 +287,11 @@ class PRM:
         axes = self.plot(axes, path, smoothed_path)
 
         axes.set_title(title)
-        figure.tight_layout()  # Reduce white margins
+        figure.tight_layout()
 
         if display:
             plt.show(block=block)
-            plt.pause(0.001)  # Wait for 1 ms or the figure won't be displayed
+            plt.pause(0.001)
 
         if display:
             plt.show(block=block)
@@ -441,21 +436,21 @@ if __name__ == "__main__":
         os.path.join(os.path.dirname(__file__), "..", "maps", map_name + ".json")
     )
 
-    # Create the roadmap
+    # Build the roadmap.
     start_time = time.perf_counter()
     prm = PRM(map_path, use_grid=True, node_count=750, grid_size=0.1, connection_distance=0.15)
     roadmap_creation_time = time.perf_counter() - start_time
 
     print(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
-    # Find the path
+    # Run A*.
     start_time = time.perf_counter()
     path = prm.find_path(start=(-1.0, -1.0), goal=(-0.6, 1.0))
     pathfinding_time = time.perf_counter() - start_time
 
     print(f"Pathfinding time: {pathfinding_time:1.3f} s")
 
-    # Smooth the path
+    # Smooth the path.
     start_time = time.perf_counter()
     smoothed_path = prm.smooth_path(
         path, data_weight=0.1, smooth_weight=0.3, additional_smoothing_points=3

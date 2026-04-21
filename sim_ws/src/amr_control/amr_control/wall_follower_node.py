@@ -24,7 +24,7 @@ class WallFollowerNode(LifecycleNode):
         """Wall follower node initializer."""
         super().__init__("wall_follower")
 
-        # Parameters
+        # Parameters.
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("enable_localization", False)
         self.declare_parameter("simulation", False)
@@ -44,21 +44,21 @@ class WallFollowerNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
+            # Parameters.
             dt = self.get_parameter("dt").get_parameter_value().double_value
             enable_localization = (
                 self.get_parameter("enable_localization").get_parameter_value().bool_value
             )
             self._simulation = self.get_parameter("simulation").get_parameter_value().bool_value
 
-            # Attribute and object initializations
+            # Attributes and objects.
             self._wall_follower = WallFollower(
                 dt,
                 simulation=self._simulation,
-                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),
             )
 
-            # Publishers
+            # Publishers.
             # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
             if self._simulation:
                 self._publisher_cmd_vel = self.create_publisher(
@@ -73,7 +73,7 @@ class WallFollowerNode(LifecycleNode):
                     qos_profile=10,
                 )
 
-            # Subscribers
+            # Subscribers.
             # TODO: 2.7. Synchronize _compute_commands_callback with /odometry and /scan.
             self._subscribers: list[message_filters.Subscriber] = []
 
@@ -147,7 +147,6 @@ class WallFollowerNode(LifecycleNode):
     def _read_commands_callback(
         self, odom_msg: Odometry, scan_msg: LaserScan
     ):
-        # self.get_logger().warn("Reading information")
         self.odom_msg = odom_msg
         self.scan_msg = scan_msg
 
@@ -171,7 +170,7 @@ class WallFollowerNode(LifecycleNode):
             return None
         if self.pose_msg.localized:
             return
-        # Execute wall follower
+
         z_v: float = self.odom_msg.twist.twist.linear.x
         z_w: float = self.odom_msg.twist.twist.angular.z
 
@@ -183,7 +182,7 @@ class WallFollowerNode(LifecycleNode):
         if not self.allowed_move:
             v = 0.0
             w = 0.0
-        # Publish
+
         self._publish_velocity_commands(v, w)
 
     def _publish_velocity_commands(self, v: float, w: float) -> None:

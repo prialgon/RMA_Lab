@@ -29,14 +29,9 @@ class EKF:
         Args:
             dt: Sampling period [s].
             map_path: Path to the map of the environment.
-            particle_count: Initial number of particles.
-            sigma_v: Standard deviation of the linear velocity [m/s].
-            sigma_w: Standard deviation of the angular velocity [rad/s].
-            sigma_z: Standard deviation of the measurements [m].
             sensor_range_max: Maximum sensor measurement range [m].
             sensor_range_min: Minimum sensor measurement range [m].
-            global_localization: First localization if True, pose tracking otherwise.
-            initial_pose: Approximate initial robot pose (x, y, theta) for tracking [m, m, rad].
+            initial_pose: Approximate initial robot pose (x, y, theta) [m, m, rad].
             initial_pose_sigma: Standard deviation of the initial pose guess [m, m, rad].
             logger: Logger object to output messages with different severity levels.
             simulation: True if running in simulation, False if running on the real robot.
@@ -51,14 +46,12 @@ class EKF:
         self._pose = None
         self._sigma = None
 
-        
-        sigma_x = 0.01      
-        sigma_y = 0.01     
-        sigma_theta = 0.02  
+        sigma_x = 0.01
+        sigma_y = 0.01
+        sigma_theta = 0.02
 
         self._Rt = np.diag([sigma_x**2, sigma_y**2, sigma_theta**2])
-        
-        
+
         sigma_lidar = 0.1
 
         self._Qt = np.eye(16) * (sigma_lidar**2)
@@ -78,66 +71,64 @@ class EKF:
             "%Y-%m-%d_%H-%M-%S"
         )
 
-
     def motion_model(self, x, u):
-        """
-        Modelo de movimiento g(x, u)
-        x: Vector de estado [x, y, theta]
-        u: Vector de control [v, w] (velocidad lineal, velocidad angular)
-        dt: Paso de tiempo (delta t)
+        """Motion model g(x, u).
+
+        Args:
+            x: State vector [x, y, theta].
+            u: Control vector [v, w] (linear and angular velocity).
+
         """
         x_prev, y_prev, theta_prev = x
         v, w = u
 
-        # Umbral pequeño para evitar división por cero
+        # Small threshold to avoid division by zero.
         if abs(w) < 1e-9:
-            # Movimiento en línea recta (Modelo lineal)
+            # Straight-line motion (linear model).
             x_next = x_prev + v * np.cos(theta_prev) * self._dt
             y_next = y_prev + v * np.sin(theta_prev) * self._dt
             theta_next = theta_prev
         else:
-            # Modelo circular (el de la imagen)
+            # Circular motion model.
             ratio = v / w
             x_next = x_prev - ratio * np.sin(theta_prev) + ratio * np.sin(theta_prev + w * self._dt)
             y_next = y_prev + ratio * np.cos(theta_prev) - ratio * np.cos(theta_prev + w * self._dt)
             theta_next = theta_prev + w * self._dt
 
-        # Es recomendable normalizar el ángulo theta entre -pi y pi
+        # Wrap theta to [-pi, pi].
         theta_next = (theta_next + np.pi) % (2 * np.pi) - np.pi
 
         return np.array([x_next, y_next, theta_next])
-    
+
     def jacobian_motion(self, x, u):
-        """
-        Calcula el Jacobiano Gt del modelo de movimiento circular.
-        x: Vector de estado [x, y, theta]
-        u: Vector de control [v, w]
-        dt: Paso de tiempo
+        """Jacobian Gt of the circular motion model.
+
+        Args:
+            x: State vector [x, y, theta].
+            u: Control vector [v, w].
+
         """
         theta_prev = x[2]
         v, w = u
-        
-        # Inicializamos la matriz identidad 3x3
+
         G = np.eye(3)
-        
+
         if abs(w) < 1e-9:
-            # Caso movimiento rectilíneo (Límite cuando w -> 0)
+            # Straight-line case (limit as w -> 0).
             G[0, 2] = -v * np.sin(theta_prev) * self._dt
-            G[1, 2] =  v * np.cos(theta_prev) * self._dt
+            G[1, 2] = v * np.cos(theta_prev) * self._dt
         else:
-            # Caso general (Fórmula de la imagen)
             ratio = v / w
             G[0, 2] = -ratio * np.cos(theta_prev) + ratio * np.cos(theta_prev + w * self._dt)
             G[1, 2] = -ratio * np.sin(theta_prev) + ratio * np.sin(theta_prev + w * self._dt)
-            
+
         return G
 
-
     def move(self, v: float, w: float) -> None:
-        """Performs a motion update on the particles.
+        """Motion update step.
 
         Args:
-            v: Linear velocity [m].
+            v: Linear velocity [m/s].
             w: Angular velocity [rad/s].
 
         """
@@ -146,16 +137,16 @@ class EKF:
         G = self.jacobian_motion(self._pose, np.array([v, w]))
         n_sigma = G @ self._sigma @ G.T + self._Rt
 
-        return n_mu, n_sigma   
-
+        return n_mu, n_sigma
 
     def jacobian_observation(self, pose, z_hat, epsilon=1e-6):
+        """Observation Jacobian H computed via finite differences.
+
+        Args:
+            pose: Predicted state [x, y, theta].
+            epsilon: Perturbation size.
+
         """
-        Calcula el Jacobiano H de la observación mediante diferencias finitas.
-        pose: Vector [x, y, theta] actual (predicho).
-        epsilon: El tamaño de la pequeña perturbación.
-        """
-       
         z_nom = z_hat
         num_rays = len(z_nom)
 
@@ -174,13 +165,16 @@ class EKF:
         H[:, 2] = (z_theta - z_nom) / epsilon
 
         return H
-    
 
     def correct(self, n_mu, n_sigma, measurements):
         n = 16
 
-        # Clean measurements
-        measurements = np.nan_to_num(measurements, nan=self._sensor_range_min, posinf=self._sensor_range_max, neginf=self._sensor_range_min)
+        measurements = np.nan_to_num(
+            measurements,
+            nan=self._sensor_range_min,
+            posinf=self._sensor_range_max,
+            neginf=self._sensor_range_min,
+        )
 
         step = len(measurements) // n
         downsampled_measurements = np.array([measurements[i] for i in range(0, n * step, step)])
@@ -203,19 +197,17 @@ class EKF:
         self._pose = mu
         self._sigma = sigma
 
-
     def plot(self, axes, orientation: bool = True):
-        """Draws particles.
+        """Draws the current pose estimate.
 
         Args:
             axes: Figure axes.
-            orientation: Draw particle orientation.
+            orientation: Draw the pose orientation arrow.
 
         Returns:
             axes: Modified axes.
 
         """
-
         if orientation:
             dx = [math.cos(self._pose[2])]
             dy = [math.sin(self._pose[2])]
@@ -242,15 +234,14 @@ class EKF:
         save_figure: bool = False,
         save_dir: str = "images",
     ):
-        """Displays the current particle set on the map.
+        """Displays the current pose estimate on the map.
 
         Args:
             title: Plot title.
-            orientation: Draw particle orientation.
-            display: True to open a window to visualize the particle filter evolution in real-time.
-                Time consuming. Does not work inside a container unless the screen is forwarded.
-            block: True to stop program execution until the figure window is closed.
-            save_figure: True to save figure to a .png file.
+            orientation: Draw the pose orientation arrow.
+            display: Open a window to visualize the filter in real time.
+            block: Stop program execution until the window is closed.
+            save_figure: Save the figure to a .png file.
             save_dir: Image save directory.
 
         """
@@ -262,12 +253,12 @@ class EKF:
         axes = self.plot(axes, orientation)
 
         axes.set_title(title + " (Iteration #" + str(self._iteration) + ")")
-        figure.tight_layout()  # Reduce white margins
+        figure.tight_layout()
 
         if display:
             plt.ion()
             plt.show(block=block)
-            plt.pause(0.001)  # Wait 1 ms or the figure won't be displayed
+            plt.pause(0.001)
 
         if save_figure:
             save_path = os.path.realpath(
@@ -289,12 +280,12 @@ class EKF:
         self._sigma = sigma
 
     def _sense(self, pose: tuple[float, float, float]) -> list[float]:
-        """Obtains the predicted measurement of every LiDAR ray given the robot's pose.
+        """Predicted LiDAR measurements for a given pose.
 
         Args:
-            pose: Particle pose (x, y, theta) [m, m, rad].
+            pose: Pose (x, y, theta) [m, m, rad].
 
-        Returns: List of predicted measurements; nan if a sensor is out of range.
+        Returns: List of predicted ranges; clamped to the sensor range limits.
 
         """
         z_hat: list[float] = []
@@ -316,14 +307,14 @@ class EKF:
     def _lidar_rays(
         self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
     ) -> list[list[tuple[float, float]]]:
-        """Determines the simulated LiDAR ray segments for a given robot pose.
+        """Simulated LiDAR ray segments for a given pose.
 
         Args:
-            pose: Robot pose (x, y, theta) in [m] and [rad].
-            indices: Rays of interest in counterclockwise order (0 for to the forward-facing ray).
-            degree_increment: Angle difference of the sensor between contiguous rays [degrees].
+            pose: Robot pose (x, y, theta) [m, m, rad].
+            indices: Rays of interest in counterclockwise order (0 is forward).
+            degree_increment: Angle between contiguous rays [deg].
 
-        Returns: Ray segments. Format:
+        Returns: Ray segments:
                  [[(x0_start, y0_start), (x0_end, y0_end)],
                   [(x1_start, y1_start), (x1_end, y1_end)],
                   ...]
@@ -331,7 +322,7 @@ class EKF:
         """
         x, y, theta = pose
 
-        # Convert the sensor origin to world coordinates
+        # Sensor origin in world coordinates.
         x_start = x - 0.035 * math.cos(theta)
         y_start = y - 0.035 * math.sin(theta)
 

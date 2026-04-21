@@ -11,15 +11,15 @@ from transforms3d.euler import quat2euler
 
 from amr_control.pure_pursuit import PurePursuit
 
-
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
+
 
 class PurePursuitNode(LifecycleNode):
     def __init__(self):
         """Pure pursuit node initializer."""
         super().__init__("pure_pursuit")
 
-        # Parameters
+        # Parameters.
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("lookahead_distance", 0.2)
         self.declare_parameter("goal_tolerance", 0.05)
@@ -36,7 +36,7 @@ class PurePursuitNode(LifecycleNode):
             f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
+            # Parameters.
             dt = self.get_parameter("dt").get_parameter_value().double_value
             lookahead_distance = (
                 self.get_parameter(
@@ -48,20 +48,20 @@ class PurePursuitNode(LifecycleNode):
             self._simulation = self.get_parameter(
                 "simulation").get_parameter_value().bool_value
 
-            # Attribute and object initializations
+            # Attributes and objects.
             self._pure_pursuit = PurePursuit(
                 dt,
                 lookahead_distance,
                 goal_tolerance=goal_tolerance,
                 simulation=self._simulation,
-                logger=None,  # Replace None with self.get_logger() to enable logging in the class
+                logger=None,
             )
 
             self._path = []
 
             self.allowed_move: bool = True
 
-            # Publishers
+            # Publishers.
             if not self._simulation:
                 self._publisher = self.create_publisher(
                     Twist, "cmd_vel", 10)
@@ -69,7 +69,7 @@ class PurePursuitNode(LifecycleNode):
                 self._publisher = self.create_publisher(
                     TwistStamped, "cmd_vel", 10)
 
-            # Subscribers
+            # Subscribers.
             self._subscriber_pose = self.create_subscription(
                 PoseStamped, "pose", self._compute_commands_callback, 10
             )
@@ -114,7 +114,7 @@ class PurePursuitNode(LifecycleNode):
 
         """
         if pose_msg.localized and self.allowed_move:
-            # Parse pose
+            # Parse the pose.
             x = pose_msg.pose.position.x
             y = pose_msg.pose.position.y
             quat_w = pose_msg.pose.orientation.w
@@ -124,12 +124,11 @@ class PurePursuitNode(LifecycleNode):
             _, _, theta = quat2euler((quat_w, quat_x, quat_y, quat_z))
             theta %= 2 * math.pi
 
-            # Execute pure pursuit
+            # Run the pure pursuit controller.
             v, w = self._pure_pursuit.compute_commands(x, y, theta)
             self.get_logger().info(
                 f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
 
-            # Publish
             self._publish_velocity_commands(v, w)
 
     def _path_callback(self, path_msg: Path):

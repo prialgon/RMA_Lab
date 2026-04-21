@@ -62,18 +62,18 @@ class PurePursuit:
         min_linear_speed = 0.08 if self._simulation else 0.05
         max_angular_speed = 2.0 if self._simulation else 1.5
 
-        if abs(alpha) > math.pi / 2:
+        if abs(alpha) > math.pi / 4:
             return 0.0, math.copysign(max_angular_speed, alpha)
 
         heading_scale = max(0.25, 1.0 - abs(alpha) / (math.pi / 2))
         v = max_linear_speed * heading_scale
 
-        if dist_to_goal < self._lookahead_distance:
-            v *= max(0.35, dist_to_goal / max(self._lookahead_distance, 1e-6))
+        # if dist_to_goal < self._lookahead_distance:
+        #     v *= max(0.35, dist_to_goal / max(self._lookahead_distance, 1e-6))
 
         v = min(max_linear_speed, max(min_linear_speed, v))
         w = max(-max_angular_speed, min(max_angular_speed, curvature * v))
-
+        
         return v, w
 
     @property
