@@ -331,6 +331,11 @@ class ParticleFilterNode(LifecycleNode):
     def _compute_odometry_callback(self, odom_msg: Odometry) -> None:
         z_v = odom_msg.twist.twist.linear.x
         z_w = odom_msg.twist.twist.angular.z
+        
+        if abs(z_v) <= 0.01:
+            z_v = 0.0
+        if abs(z_w) <= 0.1:
+            z_w = 0.0
 
         if abs(z_v) >= 0.01 or abs(z_w) >= 0.1:
             self.z_odom.append((z_v, z_w))

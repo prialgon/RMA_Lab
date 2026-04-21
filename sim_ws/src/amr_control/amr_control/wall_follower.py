@@ -296,7 +296,7 @@ class WallFollower:
             if self._left_allowed:
                 return States.LEFT
 
-        raise Exception("NO NEW STATE")
+        return States.TURNAROUND
 
     def _get_new_state_real(
         self,
@@ -439,7 +439,6 @@ class WallFollower:
 
         self._prev_error = self._error(right[: self.SIM_SIDE_POINTS])
 
-        # Keep the simulation branch aligned with the original sim controller.
         w_max: float = (self.LINEAR_SPEED_MAX - abs(v)) / (self.TRACK / 2)
         w = float(np.clip(w, -w_max, w_max))
 

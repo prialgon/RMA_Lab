@@ -53,7 +53,7 @@ class PurePursuitNode(LifecycleNode):
                 lookahead_distance,
                 goal_tolerance=goal_tolerance,
                 simulation=self._simulation,
-                logger=None,
+                logger=self.get_logger(),
             )
 
             self.allowed_move: bool = True
@@ -102,7 +102,6 @@ class PurePursuitNode(LifecycleNode):
     def _compute_commands_callback(self, pose_msg: PoseStamped):
         """Executes pure pursuit and publishes commands once pose and path are ready."""
         self._latest_pose = pose_msg
-
         if not pose_msg.localized or not self.allowed_move or not self._pure_pursuit.path:
             return
 

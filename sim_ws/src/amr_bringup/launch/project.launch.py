@@ -7,12 +7,11 @@ import math
 def generate_launch_description():
     simulation = True
     world = "project"
-    start = (0.2, -0.6, math.radians(270))
-    goal = (-1.0, 0.6)
-    localization_error_position_threshold = 0.50
-    localization_error_angle_threshold = 30.0
+    start = (-1.0
+             , 0.6, math.radians(180))
+    goal = (0.2, -0.6)
     reset_on_low_likelihood = True
-    low_likelihood_log_threshold = -6.0
+    low_likelihood_log_threshold = -0.75
     low_likelihood_patience = 3
 
     particle_filter_node = LifecycleNode(
@@ -125,8 +124,6 @@ def generate_launch_description():
                 "enable_localization": True,
                 "goal": goal,
                 "pose_tolerance": (0.1, 10.0),
-                "localization_error_position_threshold": localization_error_position_threshold,
-                "localization_error_angle_threshold": localization_error_angle_threshold,
                 "start": start,
             }
         ],

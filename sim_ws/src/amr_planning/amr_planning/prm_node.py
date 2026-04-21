@@ -14,12 +14,13 @@ from amr_planning.prm import PRM
 
 from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSHistoryPolicy, QoSReliabilityPolicy
 
+
 class PRMNode(LifecycleNode):
     def __init__(self):
         """Probabilistic roadmap (PRM) node initializer."""
         super().__init__("probabilistic_roadmap")
 
-        # Parameters
+        # Parameters.
         self.declare_parameter("connection_distance", 0.3)
         self.declare_parameter("enable_plot", False)
         self.declare_parameter("goal", (0.0, 0.0))
@@ -43,7 +44,7 @@ class PRMNode(LifecycleNode):
         self.get_logger().info(f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
+            # Parameters.
             connection_distance = (
                 self.get_parameter("connection_distance").get_parameter_value().double_value
             )
@@ -71,7 +72,7 @@ class PRMNode(LifecycleNode):
             use_grid = self.get_parameter("use_grid").get_parameter_value().bool_value
             world = self.get_parameter("world").get_parameter_value().string_value
 
-            # Attribute and object initializations
+            # Attributes and objects.
             map_path = os.path.realpath(
                 os.path.join(os.path.dirname(__file__), "..", "maps", world + ".json")
             )
@@ -86,13 +87,13 @@ class PRMNode(LifecycleNode):
                 grid_size,
                 connection_distance,
                 simulation=self._simulation,
-                logger=self.get_logger(),  # Replace None with self.get_logger() to enable logging in the class
+                logger=self.get_logger(),
             )
             roadmap_creation_time = time.perf_counter() - start_time
 
             self.get_logger().info(f"Roadmap creation time: {roadmap_creation_time:1.3f} s")
 
-            # Publishers
+            # Publishers.
             # TODO: 4.6. Create the /path publisher (Path message).
             path_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
@@ -105,8 +106,8 @@ class PRMNode(LifecycleNode):
                 "path",
                 qos_profile=path_qos_profile,
             )
-            
-            # Subscribers
+
+            # Subscribers.
             self._subscriber_pose = self.create_subscription(
                 AmrPoseStamped, "pose", self._path_callback, 10
             )
@@ -135,7 +136,6 @@ class PRMNode(LifecycleNode):
             pose_msg: Message containing the robot pose estimate.
 
         """
-        # self.get_logger().warn(str(self._localized))
         if pose_msg.localized and not self._localized:
             start = (pose_msg.pose.position.x, pose_msg.pose.position.y)
 
@@ -179,10 +179,10 @@ class PRMNode(LifecycleNode):
             node_msg.pose.position.x = node[0]
             node_msg.pose.position.y = node[1]
             path_list.append(node_msg)
-        
+
         msg.poses = path_list
         self.path_publisher.publish(msg)
-        
+
 
 def main(args=None):
     rclpy.init(args=args)

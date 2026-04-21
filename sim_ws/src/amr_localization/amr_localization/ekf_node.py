@@ -19,10 +19,10 @@ from amr_localization.ekf import EKF
 
 class EKFNode(LifecycleNode):
     def __init__(self):
-        """Particle filter node initializer."""
+        """EKF node initializer."""
         super().__init__("ekf")
 
-        # Parameters
+        # Parameters.
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("enable_plot", False)
         self.declare_parameter("global_localization", True)
@@ -49,7 +49,7 @@ class EKFNode(LifecycleNode):
             f"Transitioning from '{state.label}' to 'inactive' state.")
 
         try:
-            # Parameters
+            # Parameters.
             dt = self.get_parameter(
                 "dt").get_parameter_value().double_value
             self._enable_plot = self.get_parameter(
@@ -72,7 +72,7 @@ class EKFNode(LifecycleNode):
             world = self.get_parameter(
                 "world").get_parameter_value().string_value
 
-            # Attribute and object initializations
+            # Attributes and objects.
             self._localized = False
             self._tracking_enabled = False
             self._interactive_plot_active = False
@@ -88,7 +88,6 @@ class EKFNode(LifecycleNode):
                 initial_pose=self.initial_pose,
                 initial_pose_sigma=initial_pose_sigma,
                 simulation=self._simulation,
-                # Replace None with self.get_logger() to enable logging in the class
                 logger=self.get_logger(),
             )
 
@@ -102,7 +101,7 @@ class EKFNode(LifecycleNode):
             if self._enable_plot:
                 self._ekf.show("Initialization", save_figure=True)
 
-            # Publishers
+            # Publishers.
             # TODO: 3.1. Create the /pose publisher (PoseStamped message).
             self.pose_publisher = self.create_publisher(
                 PoseStamped,
@@ -110,14 +109,14 @@ class EKFNode(LifecycleNode):
                 10
             )
 
-            # Subscribers
+            # Subscribers.
             scan_qos_profile = QoSProfile(
                 history=QoSHistoryPolicy.KEEP_LAST,
                 depth=10,
                 reliability=QoSReliabilityPolicy.BEST_EFFORT,
                 durability=QoSDurabilityPolicy.VOLATILE,
             )
-            
+
             self.pose_subscriber = self.create_subscription(
                 PoseStamped,
                 self.get_parameter("particle_filter_pose_topic").get_parameter_value().string_value,
@@ -125,7 +124,6 @@ class EKFNode(LifecycleNode):
                 qos_profile=10,
             )
 
-            # if self._simulation:
             self._subscribers: list[message_filters.Subscriber] = []
             self._subscribers.append(
                 message_filters.Subscriber(self, Odometry, "odometry"))
@@ -139,29 +137,6 @@ class EKFNode(LifecycleNode):
             )
             ts.registerCallback(self._compute_pose_callback)
 
-            # if not self._simulation:
-
-            #     self.laser_scan_subscriber = self.create_subscription(
-            #         LaserScan,
-            #         "scan",
-            #         qos_profile=scan_qos_profile,
-            #         callback=self._compute_scan_callback,
-            #     )
-
-            #     self.odometry_subscriber = self.create_subscription(
-            #         Odometry,
-            #         "odometry",
-            #         qos_profile=10,
-            #         callback=self._compute_odometry_callback,
-            #     )
-            #     self.create_timer(
-            #         timer_period_sec=5,
-            #         callback=self._timer_callback,
-            #     )
-
-            #     self._finished_flag = True
-
-            # 3.11
             self.allowed_movement_publisher = self.create_publisher(
                 AllowMove,
                 topic="allow_move",
@@ -185,7 +160,7 @@ class EKFNode(LifecycleNode):
             f"Transitioning from '{state.label}' to 'active' state.")
 
         return super().on_activate(state)
-    
+
     def _read_pose_callback(self, msg: PoseStamped) -> None:
         if self._tracking_enabled or not msg.localized:
             return
@@ -219,7 +194,7 @@ class EKFNode(LifecycleNode):
         self.get_logger().info("Received localized particle-filter pose. EKF tracking is now active.")
 
     def _compute_pose_callback(self, odom_msg: Odometry, scan_msg: LaserScan):
-        """Subscriber callback. Executes a particle filter and publishes (x, y, theta) estimates.
+        """Subscriber callback. Runs one EKF step and publishes the (x, y, theta) estimate.
 
         Args:
             odom_msg: Message containing odometry measurements.
@@ -234,31 +209,29 @@ class EKFNode(LifecycleNode):
         msg.allowed = True
         self.allowed_movement_publisher.publish(msg)
 
-        # Parse measurements
+        # Parse measurements.
         z_v: float = odom_msg.twist.twist.linear.x
         z_w: float = odom_msg.twist.twist.angular.z
         z_scan: list[float] = scan_msg.ranges
 
-        # Execute EKF
+        # Run one EKF step.
         n_mu, n_sigma = self._execute_motion_step(z_v, z_w)
         x_h, y_h, theta_h = self._execute_measurement_step(n_mu, n_sigma, z_scan)
         self._steps += 1
 
-        # Publish
         self._publish_pose_estimate(x_h, y_h, theta_h)
 
     def _execute_measurement_step(self, n_mu, n_sigma, z_scan: list[float]) -> tuple[float, float, float]:
-        """Executes and monitors the measurement step (sense) of the particle filter.
+        """Runs and times the EKF correction step.
 
         Args:
             z_scan: Distance from every LiDAR ray to the closest obstacle [m].
 
         Returns:
-            Pose estimate (x_h, y_h, theta_h) [m, m, rad]; inf if cannot be computed.
+            Pose estimate (x_h, y_h, theta_h) [m, m, rad]; inf if it cannot be computed.
         """
         pose = (float("inf"), float("inf"), float("inf"))
 
-        # if self._localized or not self._steps % self._steps_btw_sense_updates:
         if True:
             start_time = time.perf_counter()
             self._ekf.correct(n_mu, n_sigma, z_scan)
@@ -283,7 +256,7 @@ class EKFNode(LifecycleNode):
         return pose
 
     def _execute_motion_step(self, z_v: float, z_w: float):
-        """Executes and monitors the motion step (move) of the particle filter.
+        """Runs and times the EKF prediction step.
 
         Args:
             z_v: Odometric estimate of the linear velocity of the robot center [m/s].
@@ -304,8 +277,6 @@ class EKFNode(LifecycleNode):
 
         return n_mu, n_sigma
 
-        
-
     def _publish_pose_estimate(self, x_h: float, y_h: float, theta_h: float) -> None:
         """Publishes the robot's pose estimate in a custom amr_msgs.msg.PoseStamped message.
 
@@ -319,7 +290,7 @@ class EKFNode(LifecycleNode):
         msg: PoseStamped = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.localized = self._localized
-        
+
         if self._localized:
             quaternions = euler2quat(0, 0, theta_h)
 
