@@ -1,17 +1,54 @@
-# ROS
-*/build/
-*/install/
-*/log/
+# ROS / colcon (at any depth)
+**/build/
+**/install/
+**/log/
 
 # Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 
-# Videos
+# C / C++ build outputs
+*.o
+*.a
+*.out
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# Executables
+*.exe
+
+# Videos, recordings and archives
 *.mov
+*.mp4
+*.avi
 *.zip
+*.tar.gz
+*.bag
+*.db3
+*.mcap
 
 # Generated images
 sim_ws/src/amr_localization/images/
 tb3_ws/amr_localization/images
 tb3_ws/amr_planning/images
 sim_ws/src/amr_planning/images
+
+# Secrets and machine-specific config
+ssh_config
+.ssh/
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.env
+*.env
+
+# Editors and OS
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
