@@ -4,9 +4,15 @@ ROS 2 Humble stack for a TurtleBot3 Burger. The robot starts at an unknown pose 
 
 Team project for the Autonomous Mobile Robots (RMA) course at ICAI, Universidad Pontificia Comillas. The base package layout, maps and simulation scenes were provided by the course.
 
-![Project map](sim_ws/src/amr_planning/maps/project.png)
+## Demo
+
+<img src="docs/demo_preview.gif" alt="TurtleBot3 following a planned path through the maze" width="240">
+
+[Watch the full video](docs/rma_lab_demo.mp4) (2 min, no audio). It shows the real robot during lab 3 (particle filter localization, sped up x2) and lab 4 (PRM planning and pure pursuit, sped up x1.5). The final project run was not recorded.
 
 ## How it works
+
+![Project map](sim_ws/src/amr_planning/maps/project.png)
 
 ```
 /scan, /odometry --> particle filter --> /pose --> wall follower --> /cmd_vel   (while not localized)

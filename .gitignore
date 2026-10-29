@@ -30,6 +30,7 @@ compile_commands.json
 *.bag
 *.db3
 *.mcap
+!docs/*.mp4
 
 # Generated images
 sim_ws/src/amr_localization/images/
